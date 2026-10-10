@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>세력 매집 탐지기</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>세력 매집 탐지기 <small>Volume Accumulation Tracker</small></h1>
+    <nav class="tabs">
+      <button class="tab active" data-tab="single">종목 분석</button>
+      <button class="tab" data-tab="scan">관심종목 스캐너</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="tab-single" class="tab-panel active">
+      <form id="analyze-form" class="controls">
+        <label>종목코드
+          <input id="ticker" placeholder="005930, 247540, AAPL, demo" value="demo" required />
+        </label>
+        <label>기간
+          <select id="range">
+            <option value="6mo">6개월</option>
+            <option value="1y" selected>1년</option>
+            <option value="2y">2년</option>
+            <option value="5y">5년</option>
+          </select>
+        </label>
+        <label>점수 산정 구간(일)
+          <input id="lookback" type="number" min="20" max="250" value="60" />
+        </label>
+        <label>급증 배수
+          <input id="spike" type="number" min="1.5" max="10" step="0.5" value="2.5" />
+        </label>
+        <button type="submit" class="primary">분석</button>
+        <label class="upload">CSV 업로드
+          <input id="csv" type="file" accept=".csv,text/csv" />
+        </label>
+      </form>
+
+      <div id="status" class="status"></div>
+
+      <div id="result" hidden>
+        <div class="overview">
+          <div class="card score-card">
+            <div class="stock-name" id="stock-name"></div>
+            <div class="gauge"><div class="gauge-fill" id="gauge-fill"></div></div>
+            <div class="score-row"><span id="score">0</span><span class="max">/100</span></div>
+            <div class="grade" id="grade"></div>
+          </div>
+          <div class="card kpis" id="kpis"></div>
+          <div class="card breakdown">
+            <h3>점수 구성</h3>
+            <div id="breakdown"></div>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <div class="chart-head">
+            <h3>가격 · 거래량 <span class="hint">▲ 매집 신호 · 점선 = 최대거래일 기준 세력 평단(앵커 VWAP)</span></h3>
+            <div class="legend" id="legend"></div>
+          </div>
+          <div id="price-chart" class="chart"></div>
+          <div id="volume-chart" class="chart small"></div>
+          <h3>OBV · A/D 라인 <span class="hint">주가 횡보·하락 중 상승하면 매집 다이버전스</span></h3>
+          <div id="obv-chart" class="chart small"></div>
+          <h3>CMF(20) <span class="hint">0 위 = 자금 유입 우위</span></h3>
+          <div id="cmf-chart" class="chart small"></div>
+        </div>
+
+        <div class="card">
+          <h3>매집 신호 내역 <span class="hint">행을 누르면 차트가 해당 날짜로 이동</span></h3>
+          <div class="table-wrap">
+            <table id="signals">
+              <thead><tr><th>날짜</th><th>신호</th><th>강도</th><th>종가</th><th>거래량</th><th>근거</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-scan" class="tab-panel">
+      <div class="card">
+        <h3>관심종목 일괄 스캔</h3>
+        <p class="hint">종목코드를 줄바꿈 또는 쉼표로 구분해 입력하세요 (최대 50개). 6자리 코드는 코스피 → 코스닥 순으로 자동 조회합니다.</p>
+        <textarea id="scan-list" rows="5">005930, 000660, 035420, 035720, 005380, 247540, 086520, 196170, demo</textarea>
+        <div class="controls">
+          <button id="scan-btn" class="primary">스캔 시작</button>
+        </div>
+        <div id="scan-status" class="status"></div>
+        <div class="table-wrap">
+          <table id="scan-table">
+            <thead><tr><th>#</th><th>종목</th><th>매집 점수</th><th>판정</th><th>종가</th><th>등락</th><th>CMF</th><th>추정 평단 대비</th><th>신호 수</th><th>최근 신호</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card guide">
+      <h3>탐지 로직</h3>
+      <ul>
+        <li><b>흡수형 매집봉</b> — 거래량이 평소의 2.5배 이상 터졌는데 등락은 ±2% 이내. 쏟아진 매도 물량을 누군가 받아낸 흔적.</li>
+        <li><b>세력 진입봉</b> — 거래량 3배 이상 + 몸통 5% 이상 장대양봉 + 고가 근처 마감.</li>
+        <li><b>아래꼬리 매집</b> — 거래량 1.5배 이상, 봉 길이의 절반 이상이 아래꼬리. 장중 투매를 받아낸 흔적.</li>
+        <li><b>OBV 상승 다이버전스</b> — 20일간 주가는 횡보·하락인데 OBV(누적 순매수 거래량)는 상승.</li>
+        <li><b>거래량 급감(물량 잠김)</b> — 매집봉 이후 거래량이 평소의 60% 이하로 말랐는데 주가는 매집봉 저가 위 유지. 유통 물량이 줄었다는 신호.</li>
+        <li><b>추정 세력 평단</b> — 최근 매집 신호일 종가의 거래량가중 평균. 현재가가 이 아래로 크게 내려가면 매집 가설이 약해집니다.</li>
+      </ul>
+      <p class="disclaimer">본 도구는 거래량 패턴에 기반한 통계적 추정이며 투자 권유가 아닙니다. 실제 세력 여부는 수급(기관·외국인·프로그램) 데이터와 공시를 함께 확인하세요.</p>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
