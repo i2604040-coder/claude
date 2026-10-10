@@ -36,9 +36,12 @@ def universe(market: str, n: int) -> list[dict]:
     return out[:n]
 
 
+REFRESH = False
+
+
 def cached(name: str, fn):
     path = CACHE / name
-    if path.exists():
+    if path.exists() and not (REFRESH and not name.startswith("universe")):
         return pickle.loads(path.read_bytes())
     val = fn()
     path.write_bytes(pickle.dumps(val))
@@ -52,7 +55,10 @@ def main() -> None:
     ap.add_argument("--years", default="5y")
     ap.add_argument("--flow-days", type=int, default=800)
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--refresh", action="store_true", help="시세·수급을 다시 받음 (유니버스는 유지 — 전진 검증용)")
     args = ap.parse_args()
+    global REFRESH
+    REFRESH = args.refresh
     CACHE.mkdir(exist_ok=True)
 
     uni = cached("universe.pkl", lambda: universe("KOSPI", args.kospi) + universe("KOSDAQ", args.kosdaq))

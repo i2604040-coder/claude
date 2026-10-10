@@ -6,7 +6,7 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from app import data
-from app.analysis import Params, analyze, detect_signals, attach_flow, compute_indicators
+from app.analysis import LEGACY_WEIGHTS, Params, analyze, detect_signals, attach_flow, compute_indicators
 from app.backtest import score_samples, signal_events, summarize, stats
 from app.data import demo_data, fetch_investor_flow
 from app.main import app
@@ -29,20 +29,21 @@ def flow_for(df, smart_per_day):
 def test_smart_money_signal_and_flow_score():
     df = flat_df()
     # 매일 거래량의 15%를 기관+외국인이 순매수, 주가는 횡보
-    res = analyze(df, flow=flow_for(df, 15_000.0))
+    legacy = Params(weights=LEGACY_WEIGHTS)
+    res = analyze(df, legacy, flow=flow_for(df, 15_000.0))
     assert any(s.type == "smart_money" for s in res.signals)
     flow_item = next(b for b in res.breakdown if b.key == "flow")
     assert flow_item.score == flow_item.max_score
     assert res.summary["flow"]["smart_ratio_20"] > 0.1
 
-    sold = analyze(df, flow=flow_for(df, -15_000.0))
+    sold = analyze(df, legacy, flow=flow_for(df, -15_000.0))
     assert not any(s.type == "smart_money" for s in sold.signals)
     assert sold.score < res.score
 
 
 def test_score_is_normalized_to_100_with_flow():
     df = demo_data()
-    res = analyze(df, flow=flow_for(df, 1e9))
+    res = analyze(df, Params(weights=LEGACY_WEIGHTS), flow=flow_for(df, 1e9))
     assert 0 <= res.score <= 100
     assert sum(b.max_score for b in res.breakdown) == 120
 

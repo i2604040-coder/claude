@@ -32,8 +32,10 @@ ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "results"
 H = 20                 # 평가 보유기간(거래일)
 STEP = 5               # 표본 간격(거래일)
+BIG = 0.20             # '급등' 기준: 20거래일 시장 대비 +20% 초과
 WARMUP = 130           # 점수 계산에 필요한 최소 과거 일수
 CANDIDATES = ["ev_entry", "ev_absorption", "ev_lower_tail", "obv", "cmf", "updown", "dry_up", "base", "avwap", "flow"]
+EXTRA = ["entry_recent", "smart_recent"]   # v2에서 추가된 항목 (IC 규칙 후보에는 넣지 않음 — 최초 규칙 재현성 유지)
 LEGACY_P = Params(weights=LEGACY_WEIGHTS)
 
 
@@ -86,9 +88,10 @@ def ic_table(s: pd.DataFrame, cols: list[str], target: str = "x20", min_n: int =
 
 
 def composite(s: pd.DataFrame, weights: dict) -> pd.Series:
-    num = sum(s[k].fillna(0) * w for k, w in weights.items() if w > 0 and k in s)
+    """app.analysis.score_accumulation과 같은 식: (가점 − 감점) / 가점 배점 합, 0~100으로 자름."""
+    num = sum(s[k].fillna(0) * w for k, w in weights.items() if w != 0 and k in s)
     den = sum(s[k].notna() * w for k, w in weights.items() if w > 0 and k in s)
-    return num / den.replace(0, np.nan) * 100
+    return (num / den.replace(0, np.nan)).clip(0, 1) * 100
 
 
 def quintiles(s: pd.DataFrame, col: str) -> pd.Series:
@@ -99,12 +102,21 @@ def quintiles(s: pd.DataFrame, col: str) -> pd.Series:
     return d.groupby(q)["x20"].mean()
 
 
+def quintile_big(s: pd.DataFrame, col: str) -> pd.Series:
+    """날짜별 5분위별 급등(시장 대비 +20% 초과) 비율."""
+    d = s[["date", col, "x20"]].dropna()
+    d = d[d.groupby("date")[col].transform("count") >= 30]
+    q = d.groupby("date")[col].transform(lambda x: pd.qcut(x.rank(method="first"), 5, labels=False) + 1)
+    return (d["x20"] > BIG).groupby(q).mean()
+
+
 def event_table(ev: pd.DataFrame) -> pd.DataFrame:
     rows = {}
     for typ, g in ev.groupby("type"):
         x = g["x20"].dropna()
-        rows[typ] = {"n": len(x), "mean_excess": x.mean(), "t": x.mean() / (x.std(ddof=1) / np.sqrt(len(x))) if len(x) > 2 else np.nan,
-                     "win_vs_mkt": (x > 0).mean()}
+        rows[typ] = {"n": len(x), "mean_excess": x.mean(), "median_excess": x.median(),
+                     "t": x.mean() / (x.std(ddof=1) / np.sqrt(len(x))) if len(x) > 2 else np.nan,
+                     "win_vs_mkt": (x > 0).mean(), "p_big": (x > BIG).mean(), "p_crash": (x < -BIG).mean()}
     return pd.DataFrame(rows).T
 
 
@@ -113,7 +125,9 @@ def main() -> None:
     ap.add_argument("--years", default="5y")
     ap.add_argument("--flow-days", type=int, default=800)
     ap.add_argument("--split", default="2024-10-01")
-    ap.add_argument("--write", action="store_true", help="검증 통과 시 app/weights.json 갱신")
+    ap.add_argument("--write", action="store_true", help="IC 규칙 배점이 검증 통과 시 app/weights.json 갱신")
+    ap.add_argument("--resample", action="store_true", help="캐시된 표본(results/samples.pkl)을 버리고 다시 계산")
+    ap.add_argument("--since", default=None, help="이 날짜 이후 표본만으로 현재 배점(app/weights.json)을 평가 (전진 검증)")
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     split = pd.Timestamp(args.split)
@@ -123,7 +137,7 @@ def main() -> None:
     grid = list(ref.index[WARMUP::STEP])
 
     samples_path = OUT / "samples.pkl"
-    if samples_path.exists():
+    if samples_path.exists() and not args.resample:
         s, ev = pickle.loads(samples_path.read_bytes())
     else:
         with Pool() as pool:
@@ -145,6 +159,31 @@ def main() -> None:
     mkt_daily = fwd.mean(axis=1)
     ev["date"] = pd.to_datetime(ev["date"])
     ev["x20"] = ev["r20"] - ev["date"].map(mkt_daily)
+    # 기준선: 아무 종목·아무 날의 시장 대비 초과수익 분포 (평균은 0이지만 중앙값은 음수 — 소수 급등주가 평균을 끌어올림)
+    allx = fwd.sub(mkt_daily, axis=0)
+    def base_stats(mask):
+        x = allx[mask].stack().dropna()
+        return {"n": int(len(x)), "mean_excess": float(x.mean()), "median_excess": float(x.median()),
+                "t": 0.0, "win_vs_mkt": float((x > 0).mean()), "p_big": float((x > BIG).mean()), "p_crash": float((x < -BIG).mean())}
+    baseline = {"train": base_stats(allx.index < split), "test": base_stats(allx.index >= split)}
+
+    # 변동성 맞춘 비교: 신호 직전 20일 변동성 10분위가 같은 '아무 종목·아무 날'의 기대값과 비교
+    vol = px.pct_change().rolling(20).std()
+    X = allx.stack().rename("x").to_frame()
+    X["vol"] = vol.stack()
+    X = X.dropna()
+    edges = X["vol"].quantile(np.linspace(0, 1, 11)).to_numpy()
+    X["vb"] = np.clip(np.searchsorted(edges, X["vol"]) - 1, 0, 9)
+    X["per"] = np.where(X.index.get_level_values(0) < split, "train", "test")
+    vb_base = X.groupby(["per", "vb"])["x"].agg(mean="mean", up=lambda x: (x > BIG).mean(), down=lambda x: (x < -BIG).mean())
+    ev["vol"] = [vol.at[d, c] if d in vol.index and c in vol.columns else np.nan for d, c in zip(ev["date"], ev["ticker"])]
+    ev["vb"] = np.clip(np.searchsorted(edges, ev["vol"].fillna(np.inf)) - 1, 0, 9)
+    ev["per"] = np.where(ev["date"] < split, "train", "test")
+    vm: dict = {}
+    for (per, typ), g in ev.dropna(subset=["x20", "vol"]).groupby(["per", "type"]):
+        b = vb_base.loc[per].reindex(g["vb"])
+        vm.setdefault(per, {})[typ] = {"vm_mean": float(b["mean"].mean()), "vm_p_big": float(b["up"].mean()),
+                                       "vm_p_crash": float(b["down"].mean())}
 
     train, test = s[s["date"] < split], s[s["date"] >= split]
     ic_tr, ic_te = ic_table(train, CANDIDATES + ["legacy"]), ic_table(test, CANDIDATES + ["legacy"])
@@ -153,12 +192,27 @@ def main() -> None:
     tot = sum(raw.values())
     new_w = {k: round(v / tot * 100, 1) for k, v in raw.items()} if tot > 0 else dict(LEGACY_WEIGHTS)
 
-    for name, w in (("legacy_c", LEGACY_WEIGHTS), ("new_c", new_w)):
-        s[name] = composite(s, w)
+    adopted = json.loads(WEIGHTS_FILE.read_text(encoding="utf-8")) if WEIGHTS_FILE.exists() else None
+    adopted_w = adopted["weights"] if adopted else None
+    for name, w in (("legacy_c", LEGACY_WEIGHTS), ("new_c", new_w), ("adopted_c", adopted_w)):
+        if w:
+            s[name] = composite(s, w)
     train, test = s[s["date"] < split], s[s["date"] >= split]
-    cmp_tr, cmp_te = ic_table(train, ["legacy_c", "new_c"]), ic_table(test, ["legacy_c", "new_c"])
-    q_te = {c: quintiles(test, c) for c in ("legacy_c", "new_c")}
-    q_tr = {c: quintiles(train, c) for c in ("legacy_c", "new_c")}
+    comps = [c for c in ("legacy_c", "new_c", "adopted_c") if c in s]
+    cmp_tr, cmp_te = ic_table(train, comps), ic_table(test, comps)
+    q_te = {c: quintiles(test, c) for c in comps}
+    q_tr = {c: quintiles(train, c) for c in comps}
+    big_tr = {c: quintile_big(train, c) for c in comps}
+    big_te = {c: quintile_big(test, c) for c in comps}
+    ic_extra = pd.concat({"train": ic_table(train, EXTRA), "test": ic_table(test, EXTRA)}, axis=1)
+    forward = None
+    if args.since and adopted_w:
+        fw = s[s["date"] >= pd.Timestamp(args.since)]
+        n_dates = fw.dropna(subset=["x20"])["date"].nunique()
+        forward = {"since": args.since, "dates": int(n_dates), "samples": int(fw["x20"].notna().sum())}
+        if n_dates >= 5:
+            forward["ic"] = ic_table(fw, ["legacy_c", "adopted_c"]).to_dict("index")
+            forward["quintiles"] = {c: quintiles(fw, c).to_dict() for c in ("legacy_c", "adopted_c")}
 
     def top_spread(q):
         return float(q.get(5, np.nan))
@@ -180,21 +234,31 @@ def main() -> None:
         "composite_train": cmp_tr.to_dict("index"), "composite_test": cmp_te.to_dict("index"),
         "quintiles_train": {k: v.to_dict() for k, v in q_tr.items()},
         "quintiles_test": {k: v.to_dict() for k, v in q_te.items()},
+        "quintiles_big_train": {k: v.to_dict() for k, v in big_tr.items()},
+        "quintiles_big_test": {k: v.to_dict() for k, v in big_te.items()},
         "events_train": ev_tr.to_dict("index"), "events_test": ev_te.to_dict("index"),
         "passed": bool(passed),
+        "adopted_weights": adopted_w, "adopted_meta": {k: v for k, v in (adopted or {}).items() if k != "weights"},
+        "ic_extra": {per: ic_extra[per].to_dict("index") for per in ("train", "test")}, "forward": forward,
     }
     (OUT / "calibration.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, default=float), encoding="utf-8")
 
     # 신호 유형별 과거 성과 → 화면에 근거로 표시 (가중치 채택 여부와 무관하게 항상 갱신)
-    def ev_dict(t):
-        return {k: {"n": int(v["n"]), "mean_excess": float(v["mean_excess"]), "t": float(v["t"]),
-                    "win_vs_mkt": float(v["win_vs_mkt"])} for k, v in t.to_dict("index").items()}
+    def ev_dict(t, per):
+        return {k: {"n": int(v["n"]), "mean_excess": float(v["mean_excess"]), "median_excess": float(v["median_excess"]), "t": float(v["t"]),
+                    "win_vs_mkt": float(v["win_vs_mkt"]), "p_big": float(v["p_big"]), "p_crash": float(v["p_crash"]),
+                    **vm.get(per, {}).get(k, {})} for k, v in t.to_dict("index").items()}
     EVIDENCE_FILE.write_text(json.dumps({
         "horizon": H, "universe": result["tickers_sampled"], "generated": result["generated"],
-        "train": {"period": result["period"]["train"], "by_type": ev_dict(ev_tr)},
-        "test": {"period": result["period"]["test"], "by_type": ev_dict(ev_te)},
-        "score": {"legacy_ic_train": float(cmp_tr.loc["legacy_c", "ic"]), "legacy_ic_test": float(cmp_te.loc["legacy_c", "ic"]),
-                  "legacy_t_train": float(cmp_tr.loc["legacy_c", "t"]), "legacy_t_test": float(cmp_te.loc["legacy_c", "t"])},
+        "train": {"period": result["period"]["train"], "by_type": ev_dict(ev_tr, "train"), "baseline": baseline["train"]},
+        "test": {"period": result["period"]["test"], "by_type": ev_dict(ev_te, "test"), "baseline": baseline["test"]},
+        "score": {c: {"ic_train": float(cmp_tr.loc[c, "ic"]), "ic_test": float(cmp_te.loc[c, "ic"]),
+                      "t_train": float(cmp_tr.loc[c, "t"]), "t_test": float(cmp_te.loc[c, "t"]),
+                      "top20_train": float(q_tr[c].get(5, np.nan)), "top20_test": float(q_te[c].get(5, np.nan)),
+                      "big_top20_train": float(big_tr[c].get(5, np.nan)), "big_top20_test": float(big_te[c].get(5, np.nan)),
+                      "big_bottom20_train": float(big_tr[c].get(1, np.nan)), "big_bottom20_test": float(big_te[c].get(1, np.nan))}
+                  for c in comps},
+        "adopted": {k: v for k, v in (adopted or {}).items() if k in ("version", "adopted", "weights")},
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     pd.set_option("display.width", 200)
@@ -203,8 +267,16 @@ def main() -> None:
     print("\n[가중치] legacy → new"); print({k: (LEGACY_WEIGHTS.get(k, 0), new_w.get(k, 0)) for k in CANDIDATES + ["events"]})
     print("\n[종합 점수 IC] train"); print(cmp_tr.round(4)); print("test"); print(cmp_te.round(4))
     print("\n[5분위 초과수익 20일] test"); print(pd.DataFrame(q_te).round(4)); print("train"); print(pd.DataFrame(q_tr).round(4))
+    print("\n[5분위 급등 비율] test"); print(pd.DataFrame(big_te).round(4)); print("train"); print(pd.DataFrame(big_tr).round(4))
     print("\n[신호 이벤트 시장대비 초과수익 20일] train"); print(ev_tr.round(4)); print("test"); print(ev_te.round(4))
-    print("\nOOS 통과:", passed)
+    print("\n[변동성 맞춘 기대값]"); print(json.dumps(vm, ensure_ascii=False, indent=1))
+    print("\n[기준선: 아무 종목·아무 날]"); print(pd.DataFrame(baseline).T.round(4))
+    print("\n[v2 신규 항목 IC]"); print(ic_extra.round(4))
+    print("\nOOS 통과(IC 규칙 배점):", passed)
+    if adopted_w:
+        print(f"\n[현재 적용 배점 {adopted.get('version')}] 채택일 {adopted.get('adopted')} 이전 성과는 사후 확인(표본 내)입니다.")
+    if forward:
+        print("\n[전진 검증]", json.dumps(forward, ensure_ascii=False, default=float, indent=1))
 
     if args.write and passed:
         WEIGHTS_FILE.write_text(json.dumps({

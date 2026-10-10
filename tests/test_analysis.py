@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from app.analysis import Params, analyze, normalize_ohlcv, result_to_json
+from app.analysis import LEGACY_WEIGHTS, Params, analyze, normalize_ohlcv, result_to_json
 from app.data import candidate_symbols, demo_data, parse_csv
 from app.main import app
 
@@ -53,8 +53,9 @@ def test_quiet_stock_has_no_spike_signals():
 
 
 def test_demo_scores_higher_than_quiet_stock():
-    demo = analyze(demo_data())
-    quiet = analyze(flat_df(250))
+    legacy = Params(weights=LEGACY_WEIGHTS)
+    demo = analyze(demo_data(), legacy)
+    quiet = analyze(flat_df(250), legacy)
     assert demo.score > quiet.score
     assert demo.score >= 50
     assert demo.summary["estimated_cost"] is not None

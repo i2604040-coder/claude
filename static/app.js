@@ -181,7 +181,7 @@ function renderResult(data) {
   $("#gauge-fill").style.width = `${score}%`;
   $("#gauge-fill").style.background = gradeColor(score);
   $("#score-note").textContent = EVIDENCE
-    ? `매집 패턴의 강도이며, ${EVIDENCE.universe}종목·5년 검증에서 이 점수의 수익 예측력은 확인되지 않았습니다 (백테스트 탭 참고).`
+    ? `최근 세력 진입봉 중심 점수(${EVIDENCE.adopted?.version || ""})입니다. ${EVIDENCE.universe}종목·5년 검증에서 수익 예측력은 확인되지 않았으며, 진입봉은 이후 급등·급락이 모두 잦아지는 '변동성 확대' 신호에 가깝습니다 (백테스트 탭 참고).`
     : "";
 
   const kpi = (k, v, sub = "", cls = "") => `<div class="kpi"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="s">${sub}</div></div>`;
@@ -203,10 +203,10 @@ function renderResult(data) {
   ].join("");
 
   $("#breakdown").innerHTML = data.breakdown.map((b) => `
-    <div class="bar-row">
+    <div class="bar-row${b.max_score < 0 ? " penalty" : ""}">
       <span class="lbl">${esc(b.label)}</span>
       <div class="bar"><div style="width:${(b.score / b.max_score) * 100}%"></div></div>
-      <span class="val">${b.score}/${b.max_score}</span>
+      <span class="val">${b.max_score < 0 ? `감점 ${b.score}` : `${b.score}/${b.max_score}`}</span>
       <span class="det">${esc(b.detail)}</span>
     </div>`).join("");
 
@@ -335,31 +335,44 @@ let EVIDENCE = null;
 function verdictOf(type) {
   const tr = EVIDENCE?.train.by_type[type], te = EVIDENCE?.test.by_type[type];
   if (!tr || !te) return null;
-  const same = Math.sign(tr.mean_excess) === Math.sign(te.mean_excess);
-  const sig = same && Math.abs(tr.t) >= 2 && Math.abs(te.t) >= 2;
-  const kind = sig ? (te.mean_excess > 0 ? "pos" : "neg") : "none";
-  return { kind, tr, te, label: { pos: "검증됨 ▲", neg: "역신호 ▼", none: "효과 불분명" }[kind] };
+  // 같은 변동성의 아무 종목 대비: 평균 차이 방향이 두 구간에서 같고 원 t값이 둘 다 |t|≥2일 때만 방향성 인정
+  const ex = (x) => x.mean_excess - x.vm_mean;
+  const directional = Math.sign(ex(tr)) === Math.sign(ex(te)) && Math.abs(tr.t) >= 2 && Math.abs(te.t) >= 2;
+  const volUp = [tr, te].every((x) => x.p_big > x.vm_p_big * 1.15 && x.p_crash > x.vm_p_crash * 1.15);
+  let kind = "none", label = "효과 불분명";
+  if (directional && ex(te) > 0) [kind, label] = volUp ? ["vol", "변동성 확대 · 평균↑"] : ["pos", "평균 우위 ▲"];
+  else if (directional) [kind, label] = ["neg", "평균 약세 ▼"];
+  return { kind, label, tr, te };
 }
+
+const ratio = (a, b) => `${(a * 100).toFixed(1)}% <span class="hint">(평소 ${(b * 100).toFixed(1)}%)</span>`;
 
 function verdictHtml(type) {
   const v = verdictOf(type);
   if (!v) return type === "dry_up" ? `<span class="hint">검증 대상 아님</span>` : "-";
-  return `<span class="verdict v-${v.kind}">${v.label}</span><span class="sub">최근 ${pct(v.te.mean_excess)} (n=${v.te.n.toLocaleString()})</span>`;
+  return `<span class="verdict v-${v.kind}">${v.label}</span><span class="sub">급등 ${(v.te.p_big * 100).toFixed(0)}% · 급락 ${(v.te.p_crash * 100).toFixed(0)}% (평소 ${(v.te.vm_p_big * 100).toFixed(0)}% · ${(v.te.vm_p_crash * 100).toFixed(0)}%)</span>`;
 }
 
 function renderEvidence() {
   if (!EVIDENCE) return;
   $("#evidence-card").hidden = false;
   $("#evidence-meta").textContent = `${EVIDENCE.universe}종목 · 학습 ${EVIDENCE.train.period.join("~")} · 검증 ${EVIDENCE.test.period.join("~")} · ${EVIDENCE.horizon}거래일 보유`;
-  const cell = (x) => `<td class="num"><b class="${x.mean_excess >= 0 ? "up" : "down"}">${pct(x.mean_excess, 2)}</b><span class="sub">t=${x.t.toFixed(1)} · 시장 이긴 비율 ${(x.win_vs_mkt * 100).toFixed(0)}% · n=${x.n.toLocaleString()}</span></td>`;
+  const cell = (x) => `<td class="num"><b class="${x.mean_excess - x.vm_mean >= 0 ? "up" : "down"}">${pct(x.mean_excess - x.vm_mean, 2)}</b>
+    <span class="sub">중앙값 ${pct(x.median_excess)} · t=${x.t.toFixed(1)} · n=${x.n.toLocaleString()}</span>
+    <span class="sub">급등 ${ratio(x.p_big, x.vm_p_big)} · 급락 ${ratio(x.p_crash, x.vm_p_crash)}</span></td>`;
   const types = Object.keys(EVIDENCE.test.by_type);
   $("#evidence-table").innerHTML = `<thead><tr><th>신호</th><th class="num">학습 구간</th><th class="num">검증 구간</th><th>판정</th></tr></thead><tbody>` +
     types.map((t) => {
       const v = verdictOf(t);
       return `<tr><td><span class="badge b-${t}">${esc(SIGNAL_NAMES[t] || t)}</span></td>${cell(v.tr)}${cell(v.te)}<td><span class="verdict v-${v.kind}">${v.label}</span></td></tr>`;
     }).join("") + "</tbody>";
-  const sc = EVIDENCE.score;
-  $("#evidence-score").textContent = `종합 매집 점수의 예측력(날짜별 순위상관 IC): 학습 ${sc.legacy_ic_train.toFixed(3)} (t=${sc.legacy_t_train.toFixed(1)}), 검증 ${sc.legacy_ic_test.toFixed(3)} (t=${sc.legacy_t_test.toFixed(1)}) — 0과 구별되지 않습니다.`;
+  const sc = EVIDENCE.score, ad = EVIDENCE.adopted;
+  const line = (name, x) => x ? `${name}: IC 학습 ${x.ic_train.toFixed(3)} / 검증 ${x.ic_test.toFixed(3)}, 점수 상위 20% 초과수익 학습 ${pct(x.top20_train)} / 검증 ${pct(x.top20_test)}` : "";
+  $("#evidence-score").innerHTML = [
+    line(`현재 배점(${ad?.version || "-"}, ${ad?.adopted || ""} 적용)`, sc.adopted_c),
+    line("최초 배점", sc.legacy_c),
+    "두 배점 모두 0과 구별되는 예측력은 확인되지 않았습니다. 현재 배점의 실제 검증은 적용일 이후 데이터로 진행합니다.",
+  ].filter(Boolean).join("<br>");
 }
 
 fetch("/api/evidence").then((r) => r.json()).then((e) => {

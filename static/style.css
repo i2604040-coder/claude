@@ -145,3 +145,6 @@ tr.baseline td { background: color-mix(in srgb, var(--muted) 10%, transparent); 
 .v-neg { color: var(--down); }
 .v-none { color: var(--muted); }
 #evidence-card[hidden] { display: none; }
+.v-vol { color: var(--s-mid); }
+.bar-row.penalty .bar > div { background: var(--down); }
+.bar-row.penalty .val { color: var(--down); }

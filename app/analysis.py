@@ -15,6 +15,8 @@ import pandas as pd
 
 REQUIRED_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 MIN_BARS = 30
+ENTRY_WINDOW = 10            # 최근 진입봉 반영 기간(거래일)
+SMART_PENALTY_WINDOW = 20    # 기관·외국인 매집(역신호) 감점 기간(거래일)
 WEIGHTS_FILE = Path(__file__).resolve().parent / "weights.json"
 # 최초 설계 배점 (백테스트 보정 전)
 LEGACY_WEIGHTS = {"events": 25, "obv": 20, "cmf": 15, "updown": 15, "dry_up": 10, "base": 10, "avwap": 5, "flow": 20}
@@ -315,6 +317,32 @@ def compute_components(ind: pd.DataFrame, signals: list[Signal], p: Params) -> t
             "foreign_hold_change": hold_chg,
         }
 
+    # 최근 신호의 신선도: 신호 당일 1 → window 거래일 지나면 0 (선형 감소)
+    pos = {d: i for i, d in enumerate(ind.index.strftime("%Y-%m-%d"))}
+    last = len(ind) - 1
+
+    def fresh(typ: str, window: int) -> tuple[float, Signal | None]:
+        best, best_sig = 0.0, None
+        for sg in signals:
+            if sg.type != typ or sg.date not in pos:
+                continue
+            age = last - pos[sg.date]
+            if 0 <= age < window:
+                v = (0.5 + 0.5 * sg.strength) * (1 - age / window)
+                if v > best:
+                    best, best_sig = v, sg
+        return best, best_sig
+
+    v, sg = fresh("entry", ENTRY_WINDOW)
+    comp["entry_recent"] = (v, "최근 세력 진입봉",
+                            f"{sg.date} 진입봉 ({sg.detail.split(' · ')[0]}), {last - pos[sg.date]}거래일 경과" if sg
+                            else f"최근 {ENTRY_WINDOW}거래일 내 없음")
+    if "SmartNet" in ind:
+        v, sg = fresh("smart_money", SMART_PENALTY_WINDOW)
+        comp["smart_recent"] = (v, "기관·외국인 매수에도 주가 정체 (감점)",
+                                f"{sg.date} 발생, {last - pos[sg.date]}거래일 경과 — 과거 검증상 이후 시장 대비 약세" if sg
+                                else f"최근 {SMART_PENALTY_WINDOW}거래일 내 없음")
+
     extra = {"recent": recent, "lb": lb, "cmf": cmf, "udr": udr, "anchor_label": anchor_label,
              "avwap_last": avwap_last, "last_close": last_close, "flow_summary": flow_summary}
     return comp, extra
@@ -323,10 +351,11 @@ def compute_components(ind: pd.DataFrame, signals: list[Signal], p: Params) -> t
 def score_accumulation(ind: pd.DataFrame, signals: list[Signal], p: Params) -> tuple[float, list[ScoreItem], dict]:
     comp, x = compute_components(ind, signals, p)
     weights = p.weights if p.weights is not None else load_weights()
+    # 양(+) 배점 항목은 가점, 음(−) 배점 항목은 감점. 만점 = 양(+) 배점 합계
     items = [ScoreItem(k, comp[k][1], comp[k][0] * w, w, comp[k][2])
-             for k, w in weights.items() if w > 0 and k in comp]
-    max_total = sum(i.max_score for i in items)
-    total = round(sum(i.score for i in items) / max_total * 100, 1) if max_total else 0.0
+             for k, w in weights.items() if w != 0 and k in comp]
+    max_total = sum(i.max_score for i in items if i.max_score > 0)
+    total = round(float(np.clip(sum(i.score for i in items) / max_total, 0, 1)) * 100, 1) if max_total else 0.0
     for it in items:
         it.score = round(it.score, 1)
         it.max_score = round(it.max_score, 1)

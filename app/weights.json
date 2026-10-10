@@ -1,0 +1,14 @@
+{
+  "version": "v2",
+  "adopted": "2026-10-10",
+  "weights": {
+    "entry_recent": 60,
+    "base": 10,
+    "avwap": 10,
+    "cmf": 10,
+    "flow": 10,
+    "smart_recent": -20
+  },
+  "rationale": "299종목·5년 신호 이벤트 분석에서 학습·검증 두 구간 모두 같은 방향으로 유의했던 세력 진입봉(+)을 중심으로, 기관·외국인 매집(−)을 감점으로 반영. 두 구간 모두 약한 양(+)이었던 박스권 수렴·세력 평단·CMF·수급은 소폭 유지, 음(−) 또는 0이었던 항목(OBV, 상승일 거래량, 거래량 급감, 흡수봉·아래꼬리 빈도)은 제외.",
+  "caveat": "검증 구간 결과를 본 뒤 정한 배점이므로 2026-10-10 이전 성과는 표본 내 확인일 뿐. 실제 검증은 python -m research.collect --refresh 후 python -m research.calibrate --resample --since 2026-10-10 로 이후 데이터에서 수행."
+}
