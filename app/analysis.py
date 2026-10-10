@@ -27,6 +27,7 @@ class Params:
     divergence_window: int = 20
     base_window: int = 20
     base_width: float = 0.12         # 박스권 폭(고가-저가)/종가 한도
+    flow_ratio: float = 0.08         # 기관·외국인 매집: 20일 순매수 / 거래량 비율 하한
 
 
 @dataclass
@@ -71,7 +72,9 @@ SIGNAL_LABELS = {
     "lower_tail": "아래꼬리 매집",
     "dry_up": "거래량 급감(물량 잠김)",
     "obv_divergence": "OBV 상승 다이버전스",
+    "smart_money": "기관·외국인 매집",
 }
+SPIKE_TYPES = ("entry", "absorption", "lower_tail")
 
 
 def normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
@@ -131,76 +134,88 @@ def compute_indicators(df: pd.DataFrame, p: Params) -> pd.DataFrame:
 
 
 def detect_signals(ind: pd.DataFrame, p: Params) -> list[Signal]:
+    """날짜별 매집 신호 탐지. 'dry_up'을 제외한 모든 신호는 해당 날짜까지의 데이터만 사용(백테스트 가능)."""
     signals: list[Signal] = []
+    dates = ind.index.strftime("%Y-%m-%d")
+    o, h, l, c, v = (ind[k].to_numpy(dtype=float) for k in REQUIRED_COLUMNS)
+    vr = ind["VolRatio"].to_numpy(dtype=float)
+    chg = ind["Change"].to_numpy(dtype=float)
+    lt = ind["LowerTail"].to_numpy(dtype=float)
+    ut = ind["UpperTail"].to_numpy(dtype=float)
+    body = ind["Body"].to_numpy(dtype=float)
+    obv = ind["OBV"].to_numpy(dtype=float)
+    smart = ind["SmartNet"].to_numpy(dtype=float) if "SmartNet" in ind else None
 
     def add(i: int, typ: str, strength: float, detail: str) -> None:
-        row = ind.iloc[i]
+        if smart is not None and np.isfinite(smart[i]) and typ in SPIKE_TYPES:
+            detail += f" · 기관+외국인 {smart[i]:+,.0f}주"
         signals.append(Signal(
-            date=ind.index[i].strftime("%Y-%m-%d"),
-            type=typ,
-            label=SIGNAL_LABELS[typ],
+            date=dates[i], type=typ, label=SIGNAL_LABELS[typ],
             strength=round(float(min(max(strength, 0), 1)), 3),
-            price=float(row["Close"]),
-            volume=float(row["Volume"]),
-            detail=detail,
+            price=float(c[i]), volume=float(v[i]), detail=detail,
         ))
 
     n = len(ind)
-    last_obv_div = -999
-    for i in range(1, n):
-        r = ind.iloc[i]
-        vr = r["VolRatio"]
-        if not np.isfinite(vr):
-            continue
-        o, h, l, c = r["Open"], r["High"], r["Low"], r["Close"]
-        chg = r["Change"]
-        rng = h - l
-
+    rng = h - l
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ok = np.isfinite(vr) & (rng > 0)
         # 1) 세력 진입봉: 대량 거래 + 장대양봉 + 고가 근처 마감
-        if vr >= p.entry_ratio and c > o and (c - o) / o >= p.entry_body and rng > 0 and (h - c) / rng <= 0.3:
-            add(i, "entry", (vr - p.entry_ratio) / 7 + 0.4,
-                f"거래량 {vr:.1f}배, 양봉 몸통 {(c - o) / o * 100:.1f}%")
+        entry = ok & (vr >= p.entry_ratio) & (c > o) & ((c - o) / o >= p.entry_body) & ((h - c) / rng <= 0.3)
         # 2) 흡수형 매집봉: 거래량은 터졌는데 가격은 거의 안 움직임 → 매도 물량을 누군가 받아냄
-        elif vr >= p.spike_ratio and abs(chg) <= p.absorb_max_move:
-            add(i, "absorption", (vr - p.spike_ratio) / 5 + 0.4,
-                f"거래량 {vr:.1f}배인데 등락 {chg * 100:+.1f}%")
-
+        absorb = ok & ~entry & (vr >= p.spike_ratio) & (np.abs(chg) <= p.absorb_max_move)
         # 3) 아래꼬리 매집: 장중 투매를 받아내 긴 아래꼬리 형성
-        lt, body = r["LowerTail"], r["Body"]
-        if vr >= p.tail_ratio and rng > 0 and lt / rng >= 0.5 and lt >= 2 * max(body, rng * 0.05) and r["UpperTail"] / rng <= 0.25:
-            add(i, "lower_tail", (lt / rng - 0.5) + vr / 10,
-                f"아래꼬리 {lt / c * 100:.1f}%, 거래량 {vr:.1f}배")
+        tail = (ok & (vr >= p.tail_ratio) & (lt / rng >= 0.5)
+                & (lt >= 2 * np.maximum(body, rng * 0.05)) & (ut / rng <= 0.25))
 
-        # 4) OBV 상승 다이버전스: 주가는 횡보/하락인데 OBV는 상승
-        w = p.divergence_window
-        if i >= w and i - last_obv_div >= w // 2:
-            win = ind.iloc[i - w + 1:i + 1]
-            price_trend = win["Close"].iloc[-1] / win["Close"].iloc[0] - 1
-            obv = win["OBV"]
-            obv_scale = win["Volume"].sum() or 1.0
-            obv_trend = (obv.iloc[-1] - obv.iloc[0]) / obv_scale
-            if price_trend <= 0.03 and obv_trend >= 0.25:
-                add(i, "obv_divergence", obv_trend,
-                    f"{w}일간 주가 {price_trend * 100:+.1f}%, OBV 순유입 {obv_trend * 100:.0f}%")
-                last_obv_div = i
+    for i in np.flatnonzero(entry):
+        add(i, "entry", (vr[i] - p.entry_ratio) / 7 + 0.4,
+            f"거래량 {vr[i]:.1f}배, 양봉 몸통 {(c[i] - o[i]) / o[i] * 100:.1f}%")
+    for i in np.flatnonzero(absorb):
+        add(i, "absorption", (vr[i] - p.spike_ratio) / 5 + 0.4,
+            f"거래량 {vr[i]:.1f}배인데 등락 {chg[i] * 100:+.1f}%")
+    for i in np.flatnonzero(tail):
+        add(i, "lower_tail", (lt[i] / rng[i] - 0.5) + vr[i] / 10,
+            f"아래꼬리 {lt[i] / c[i] * 100:.1f}%, 거래량 {vr[i]:.1f}배")
 
-    # 5) 거래량 급감(물량 잠김): 급증 이후 거래가 말라붙었는데 가격은 급증일 저가 위 유지
-    spikes = [s for s in signals if s.type in ("entry", "absorption", "lower_tail")]
-    if spikes and n >= 10:
-        last_spike = max(spikes, key=lambda s: s.date)
-        idx = ind.index.get_loc(pd.Timestamp(last_spike.date))
-        after = ind.iloc[idx + 1:]
-        if len(after) >= 5:
-            recent = after.iloc[-5:]
-            base_vol = ind["Volume"].iloc[max(0, idx - 60):idx].mean()
-            spike_low = ind["Low"].iloc[idx]
+    # 4) OBV 상승 다이버전스 / 5) 기관·외국인 매집: 주가는 횡보·하락인데 순매수 누적
+    w = p.divergence_window
+    if n > w:
+        vol_sum = np.convolve(v, np.ones(w), "valid")              # i = w-1 .. n-1
+        price_tr = c[w - 1:] / c[:n - w + 1] - 1
+        obv_tr = (obv[w - 1:] - obv[:n - w + 1]) / np.where(vol_sum > 0, vol_sum, 1)
+        flat = price_tr <= 0.03
+        last = -999
+        for k in np.flatnonzero(flat & (obv_tr >= 0.25)):
+            i = k + w - 1
+            if i - last >= w // 2:
+                add(i, "obv_divergence", obv_tr[k],
+                    f"{w}일간 주가 {price_tr[k] * 100:+.1f}%, OBV 순유입 {obv_tr[k] * 100:.0f}%")
+                last = i
+        if smart is not None:
+            sm = np.nan_to_num(smart)
+            known = np.convolve(np.isfinite(smart).astype(float), np.ones(w), "valid")
+            sm_tr = np.convolve(sm, np.ones(w), "valid") / np.where(vol_sum > 0, vol_sum, 1)
+            last = -999
+            for k in np.flatnonzero(flat & (sm_tr >= p.flow_ratio) & (known >= w * 0.8)):
+                i = k + w - 1
+                if i - last >= w // 2:
+                    add(i, "smart_money", sm_tr[k] / (p.flow_ratio * 3),
+                        f"{w}일간 주가 {price_tr[k] * 100:+.1f}%, 기관+외국인 순매수 = 거래량의 {sm_tr[k] * 100:.1f}%")
+                    last = i
+
+    # 6) 거래량 급감(물량 잠김): 급증 이후 거래가 말라붙었는데 가격은 급증일 저가 위 유지
+    spike_idx = np.flatnonzero(entry | absorb | tail)
+    if len(spike_idx) and n >= 10:
+        idx = int(spike_idx[-1])
+        if n - idx - 1 >= 5:
+            base_vol = v[max(0, idx - 60):idx].mean() if idx > 0 else 0
             if base_vol > 0:
-                dry = recent["Volume"].mean() / base_vol
-                if dry <= 0.6 and recent["Close"].min() >= spike_low:
+                dry = v[-5:].mean() / base_vol
+                if dry <= 0.6 and c[-5:].min() >= l[idx]:
                     add(n - 1, "dry_up", 1 - dry,
-                        f"최근 5일 거래량이 평소의 {dry * 100:.0f}% 수준, 주가는 {last_spike.date} 매집봉 저가 위 유지")
+                        f"최근 5일 거래량이 평소의 {dry * 100:.0f}% 수준, 주가는 {dates[idx]} 매집봉 저가 위 유지")
 
-    signals.sort(key=lambda s: s.date)
+    signals.sort(key=lambda s: (s.date, s.type))
     return signals
 
 
@@ -270,7 +285,31 @@ def score_accumulation(ind: pd.DataFrame, signals: list[Signal], p: Params) -> t
     items.append(ScoreItem("avwap", "세력 평단 위 유지", vwap_score, 5,
                            f"{anchor_label:%Y-%m-%d} 최대거래일 기준 VWAP {avwap_last:,.0f} 대비 {gap * 100:+.1f}%"))
 
-    total = round(sum(i.score for i in items), 1)
+    # 8. 기관·외국인 수급 (20, 국내 종목 수급 데이터가 있을 때만)
+    flow_summary = {}
+    if "SmartNet" in ind and win["SmartNet"].notna().sum() >= min(20, len(win)) * 0.8:
+        w20 = ind.iloc[-20:]
+        vol20 = w20["Volume"].sum() or 1.0
+        r20 = float(w20["SmartNet"].sum() / vol20)
+        r_lb = float(win["SmartNet"].sum() / (win["Volume"].sum() or 1.0))
+        hold = win["ForeignHold"].dropna()
+        hold_chg = float(hold.iloc[-1] - hold.iloc[0]) if len(hold) >= 2 else 0.0
+        flow_score = (float(np.clip(r20 / 0.08, 0, 1)) * 10 + float(np.clip(r_lb / 0.05, 0, 1)) * 6
+                      + (4.0 if hold_chg > 0 else 0.0))
+        items.append(ScoreItem("flow", "기관·외국인 순매수", flow_score, 20,
+                               f"20일 순매수 = 거래량의 {r20 * 100:+.1f}%, {p.lookback}일 {r_lb * 100:+.1f}%, "
+                               f"외국인 지분율 {hold_chg:+.2f}%p"))
+        flow_summary = {
+            "foreign_20": float(w20["Foreign"].sum()),
+            "organ_20": float(w20["Organ"].sum()),
+            "individual_20": float(w20["Individual"].sum()),
+            "smart_ratio_20": r20,
+            "foreign_hold": float(hold.iloc[-1]) if len(hold) else None,
+            "foreign_hold_change": hold_chg,
+        }
+
+    max_total = sum(i.max_score for i in items)
+    total = round(sum(i.score for i in items) / max_total * 100, 1)
     for it in items:
         it.score = round(it.score, 1)
 
@@ -296,6 +335,7 @@ def score_accumulation(ind: pd.DataFrame, signals: list[Signal], p: Params) -> t
         "cost_gap": (last_close / est_cost - 1) if est_cost else None,
         "recent_signal_count": len(recent),
         "lookback": p.lookback,
+        "flow": flow_summary or None,
     }
     return total, items, summary
 
@@ -310,12 +350,27 @@ def grade_of(score: float) -> str:
     return "특이사항 없음"
 
 
-def analyze(df: pd.DataFrame, params: Params | None = None) -> AnalysisResult:
+FLOW_COLUMNS = ["Foreign", "Organ", "Individual", "ForeignHold"]
+
+
+def attach_flow(ind: pd.DataFrame, flow: pd.DataFrame | None) -> pd.DataFrame:
+    """투자자별 순매수(주)를 일봉에 붙임. SmartNet = 기관 + 외국인."""
+    if flow is None or flow.empty:
+        return ind
+    f = flow.reindex(ind.index)[FLOW_COLUMNS]
+    if f["Foreign"].notna().sum() < 5:
+        return ind
+    ind = ind.join(f)
+    ind["SmartNet"] = ind["Foreign"] + ind["Organ"]
+    return ind
+
+
+def analyze(df: pd.DataFrame, params: Params | None = None, flow: pd.DataFrame | None = None) -> AnalysisResult:
     p = params or Params()
     df = normalize_ohlcv(df)
     if len(df) < MIN_BARS:
         raise ValueError(f"분석에는 최소 {MIN_BARS}거래일 데이터가 필요합니다 (현재 {len(df)}일)")
-    ind = compute_indicators(df, p)
+    ind = attach_flow(compute_indicators(df, p), flow)
     signals = detect_signals(ind, p)
     score, breakdown, summary = score_accumulation(ind, signals, p)
     ind["AVWAP"] = np.nan
@@ -331,8 +386,17 @@ def result_to_json(res: AnalysisResult) -> dict:
         vals = ind[col].to_numpy(dtype=float)
         return [None if not np.isfinite(x) else round(float(x), digits) for x in vals]
 
+    has_flow = "SmartNet" in ind
+    flow_series = {}
+    if has_flow:
+        for col, key in (("Foreign", "foreign_cum"), ("Organ", "organ_cum"), ("Individual", "individual_cum")):
+            known = ind[col].notna()
+            cum = ind[col].fillna(0).cumsum().where(known.cummax())
+            flow_series[key] = [None if not np.isfinite(x) else float(x) for x in cum.to_numpy(dtype=float)]
+
     return {
         "score": res.score,
+        "has_flow": has_flow,
         "grade": res.grade,
         "breakdown": [b.to_dict() for b in res.breakdown],
         "summary": res.summary,
@@ -350,5 +414,6 @@ def result_to_json(res: AnalysisResult) -> dict:
             "ad": series("AD", 0),
             "cmf": series("CMF", 4),
             "avwap": series("AVWAP", 2),
+            **flow_series,
         },
     }

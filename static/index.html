@@ -13,6 +13,7 @@
     <nav class="tabs">
       <button class="tab active" data-tab="single">종목 분석</button>
       <button class="tab" data-tab="scan">관심종목 스캐너</button>
+      <button class="tab" data-tab="backtest">백테스트</button>
     </nav>
   </header>
 
@@ -36,7 +37,9 @@
         <label>급증 배수
           <input id="spike" type="number" min="1.5" max="10" step="0.5" value="2.5" />
         </label>
+        <label class="check"><input id="use-flow" type="checkbox" checked /> 기관·외국인 수급 반영</label>
         <button type="submit" class="primary">분석</button>
+        <button type="button" id="bt-this" class="secondary">이 종목 백테스트</button>
         <label class="upload">CSV 업로드
           <input id="csv" type="file" accept=".csv,text/csv" />
         </label>
@@ -70,6 +73,10 @@
           <div id="obv-chart" class="chart small"></div>
           <h3>CMF(20) <span class="hint">0 위 = 자금 유입 우위</span></h3>
           <div id="cmf-chart" class="chart small"></div>
+          <div id="flow-wrap" hidden>
+            <h3>투자자별 누적 순매수(주) <span class="hint">주가가 눌려 있는데 기관·외국인 누적선이 오르면 매집 정황</span></h3>
+            <div id="flow-chart" class="chart small"></div>
+          </div>
         </div>
 
         <div class="card">
@@ -95,10 +102,53 @@
         <div id="scan-status" class="status"></div>
         <div class="table-wrap">
           <table id="scan-table">
-            <thead><tr><th>#</th><th>종목</th><th>매집 점수</th><th>판정</th><th>종가</th><th>등락</th><th>CMF</th><th>추정 평단 대비</th><th>신호 수</th><th>최근 신호</th></tr></thead>
+            <thead><tr><th>#</th><th>종목</th><th>매집 점수</th><th>판정</th><th>종가</th><th>등락</th><th>CMF</th><th>기관+외인 20일</th><th>추정 평단 대비</th><th>신호 수</th><th>최근 신호</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <section id="tab-backtest" class="tab-panel">
+      <div class="card">
+        <h3>신호·점수 백테스트</h3>
+        <p class="hint">
+          신호가 나온 날 종가에 샀다면 5·10·20거래일 뒤 수익률이 어땠는지 집계합니다. 매집 점수는 과거 각 시점까지의 데이터만으로 다시 계산합니다(5거래일 간격).
+          <b>기준</b>은 같은 종목·같은 기간에 아무 날이나 샀을 때의 수익률이며, 신호의 가치는 <b>기준 대비 초과수익</b>으로 판단하세요.
+          여러 종목을 넣으면 표본을 합쳐서 집계합니다(최대 30개).
+        </p>
+        <textarea id="bt-list" rows="3">005930, 000660, 035420, 035720, 005380, 247540, 086520, 196170</textarea>
+        <div class="controls">
+          <label>기간
+            <select id="bt-range">
+              <option value="1y">1년</option>
+              <option value="2y" selected>2년</option>
+              <option value="5y">5년</option>
+            </select>
+          </label>
+          <button id="bt-btn" class="primary">백테스트 실행</button>
+        </div>
+        <div id="bt-status" class="status"></div>
+      </div>
+
+      <div id="bt-result" hidden>
+        <div class="card">
+          <h3>신호별 성과 <span class="hint">평균 수익률 · (기준 대비 초과) · 승률 &nbsp;|&nbsp; MAE = 20일 내 진입가 대비 평균 최대 낙폭</span></h3>
+          <div class="table-wrap"><table id="bt-signal"></table></div>
+        </div>
+        <div class="card">
+          <h3>매집 점수 구간별 성과</h3>
+          <div class="table-wrap"><table id="bt-score"></table></div>
+        </div>
+        <div class="card" id="bt-history-card" hidden>
+          <h3>매집 점수 추이 <span class="hint">선 = 종가, 막대 = 그 시점의 매집 점수</span></h3>
+          <div id="bt-history" class="chart"></div>
+        </div>
+        <div class="card">
+          <h3>신호 이벤트 <span class="hint">최근 300건 · 행을 누르면 종목 분석으로 이동</span></h3>
+          <div class="table-wrap"><table id="bt-events"></table></div>
+        </div>
+        <div id="bt-tickers" class="hint"></div>
       </div>
     </section>
 
@@ -110,6 +160,7 @@
         <li><b>아래꼬리 매집</b> — 거래량 1.5배 이상, 봉 길이의 절반 이상이 아래꼬리. 장중 투매를 받아낸 흔적.</li>
         <li><b>OBV 상승 다이버전스</b> — 20일간 주가는 횡보·하락인데 OBV(누적 순매수 거래량)는 상승.</li>
         <li><b>거래량 급감(물량 잠김)</b> — 매집봉 이후 거래량이 평소의 60% 이하로 말랐는데 주가는 매집봉 저가 위 유지. 유통 물량이 줄었다는 신호.</li>
+        <li><b>기관·외국인 매집</b> — 국내 종목 한정. 20일간 주가는 횡보·하락인데 기관+외국인 순매수가 같은 기간 거래량의 8% 이상. 매집 점수에도 수급 항목(20점)이 추가되고 100점 만점으로 환산됩니다.</li>
         <li><b>추정 세력 평단</b> — 최근 매집 신호일 종가의 거래량가중 평균. 현재가가 이 아래로 크게 내려가면 매집 가설이 약해집니다.</li>
       </ul>
       <p class="disclaimer">본 도구는 거래량 패턴에 기반한 통계적 추정이며 투자 권유가 아닙니다. 실제 세력 여부는 수급(기관·외국인·프로그램) 데이터와 공시를 함께 확인하세요.</p>

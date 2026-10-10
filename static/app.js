@@ -11,12 +11,14 @@ const fmtVol = (v) => {
 };
 let PD = 2; // 가격 소수 자릿수 (원화는 0)
 const pdOf = (cur) => (cur === "KRW" ? 0 : 2);
+const signedVol = (v) => (v == null ? "-" : `${v >= 0 ? "+" : "-"}${fmtVol(Math.abs(v))}`);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const SIGNAL_COLORS = {
-  entry: "#e03131", absorption: "#f08c00", lower_tail: "#7048e8", obv_divergence: "#1098ad", dry_up: "#2f9e44",
+  entry: "#e03131", absorption: "#f08c00", lower_tail: "#7048e8", obv_divergence: "#1098ad", dry_up: "#2f9e44", smart_money: "#c2255c",
 };
-const SIGNAL_SHORT = { entry: "진입", absorption: "흡수", lower_tail: "꼬리", obv_divergence: "OBV", dry_up: "잠김" };
+const SIGNAL_SHORT = { entry: "진입", absorption: "흡수", lower_tail: "꼬리", obv_divergence: "OBV", dry_up: "잠김", smart_money: "수급" };
+const ABOVE_TYPES = new Set(["obv_divergence", "dry_up", "smart_money"]);
 
 function gradeClass(score) {
   if (score >= 70) return "g-strong";
@@ -94,9 +96,9 @@ function renderCharts(data) {
   }
   candles.setMarkers(data.signals.map((sig) => ({
     time: sig.date,
-    position: sig.type === "obv_divergence" || sig.type === "dry_up" ? "aboveBar" : "belowBar",
+    position: ABOVE_TYPES.has(sig.type) ? "aboveBar" : "belowBar",
     color: SIGNAL_COLORS[sig.type],
-    shape: sig.type === "obv_divergence" || sig.type === "dry_up" ? "circle" : "arrowUp",
+    shape: ABOVE_TYPES.has(sig.type) ? "circle" : "arrowUp",
     text: SIGNAL_SHORT[sig.type],
   })));
   charts.push({ chart: price, el: priceEl });
@@ -104,7 +106,7 @@ function renderCharts(data) {
   // volume
   const volEl = $("#volume-chart");
   const vol = LightweightCharts.createChart(volEl, { ...themeOpts(), height: volEl.clientHeight });
-  const sigDates = new Set(data.signals.filter((x) => x.type !== "obv_divergence" && x.type !== "dry_up").map((x) => x.date));
+  const sigDates = new Set(data.signals.filter((x) => !ABOVE_TYPES.has(x.type)).map((x) => x.date));
   const volSeries = vol.addHistogramSeries({ priceFormat: { type: "volume" }, priceLineVisible: false });
   volSeries.setData(s.dates.map((t, i) => ({
     time: t, value: s.volume[i],
@@ -127,6 +129,19 @@ function renderCharts(data) {
   cmf.addHistogramSeries({ priceLineVisible: false, priceFormat: { type: "price", precision: 3, minMove: 0.001 } })
     .setData(pt(s.cmf).map((p) => ({ ...p, color: p.value >= 0 ? up : down })));
   charts.push({ chart: cmf, el: cmfEl });
+
+  // 투자자별 누적 순매수 (국내 종목)
+  $("#flow-wrap").hidden = !data.has_flow;
+  if (data.has_flow) {
+    const flowEl = $("#flow-chart");
+    const flow = LightweightCharts.createChart(flowEl, { ...themeOpts(), height: flowEl.clientHeight });
+    const add = (key, color, title, width = 2) =>
+      flow.addLineSeries({ color, lineWidth: width, title, priceFormat: { type: "volume" }, priceLineVisible: false }).setData(pt(s[key]));
+    add("foreign_cum", "#e8590c", "외국인");
+    add("organ_cum", "#1971c2", "기관");
+    add("individual_cum", "#868e96", "개인", 1);
+    charts.push({ chart: flow, el: flowEl });
+  }
 
   syncCharts();
   charts.forEach((c) => c.chart.timeScale().fitContent());
@@ -174,6 +189,13 @@ function renderResult(data) {
     kpi("세력평단(앵커 VWAP)", fmt(summary.anchor_vwap, PD), `${summary.anchor_date} 최대거래일 기준`),
     kpi("CMF(20)", summary.cmf.toFixed(3), summary.cmf > 0 ? "자금 유입 우위" : "자금 유출 우위", summary.cmf > 0 ? "up" : "down"),
     kpi("상승/하락 거래량비", summary.updown_ratio.toFixed(2), "최근 20일"),
+    ...(summary.flow ? [
+      kpi("외국인 20일 순매수", `${signedVol(summary.flow.foreign_20)}주`,
+        summary.flow.foreign_hold != null ? `지분율 ${summary.flow.foreign_hold.toFixed(2)}% (${summary.flow.foreign_hold_change >= 0 ? "+" : ""}${summary.flow.foreign_hold_change.toFixed(2)}%p)` : "",
+        summary.flow.foreign_20 >= 0 ? "up" : "down"),
+      kpi("기관 20일 순매수", `${signedVol(summary.flow.organ_20)}주`, `기관+외인 = 거래량의 ${pct(summary.flow.smart_ratio_20)}`,
+        summary.flow.organ_20 >= 0 ? "up" : "down"),
+    ] : []),
   ].join("");
 
   $("#breakdown").innerHTML = data.breakdown.map((b) => `
@@ -216,7 +238,7 @@ async function analyzeTicker(ticker) {
   btn.disabled = true;
   setStatus(status, `${ticker} 분석 중…`);
   try {
-    const q = new URLSearchParams({ ticker, range: $("#range").value, lookback: $("#lookback").value, spike: $("#spike").value });
+    const q = new URLSearchParams({ ticker, range: $("#range").value, lookback: $("#lookback").value, spike: $("#spike").value, flow: $("#use-flow").checked });
     const res = await fetch(`/api/analyze?${q}`);
     if (!res.ok) throw new Error(await readError(res));
     const data = await res.json();
@@ -268,13 +290,13 @@ $("#scan-btn").addEventListener("click", async () => {
     const res = await fetch("/api/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tickers, range: $("#range").value, lookback: +$("#lookback").value, spike: +$("#spike").value }),
+      body: JSON.stringify({ tickers, range: $("#range").value, lookback: +$("#lookback").value, spike: +$("#spike").value, flow: $("#use-flow").checked }),
     });
     if (!res.ok) throw new Error(await readError(res));
     const { results } = await res.json();
     let rank = 0;
     $("#scan-table tbody").innerHTML = results.map((r) => r.error
-      ? `<tr><td></td><td>${esc(r.ticker)}</td><td colspan="8" class="down">${esc(r.error)}</td></tr>`
+      ? `<tr><td></td><td>${esc(r.ticker)}</td><td colspan="9" class="down">${esc(r.error)}</td></tr>`
       : `<tr data-ticker="${esc(r.ticker)}">
           <td>${++rank}</td>
           <td><b>${esc(r.name)}</b><br><span class="hint">${esc(r.symbol)}</span></td>
@@ -283,6 +305,7 @@ $("#scan-btn").addEventListener("click", async () => {
           <td class="num">${fmt(r.last_close, pdOf(r.currency))}</td>
           <td class="num ${r.change >= 0 ? "up" : "down"}">${pct(r.change)}</td>
           <td class="num ${r.cmf >= 0 ? "up" : "down"}">${r.cmf.toFixed(3)}</td>
+          <td class="num ${r.smart_ratio_20 == null ? "" : r.smart_ratio_20 >= 0 ? "up" : "down"}">${r.smart_ratio_20 == null ? "-" : pct(r.smart_ratio_20)}</td>
           <td class="num">${pct(r.cost_gap)}</td>
           <td class="num">${r.signal_count}</td>
           <td>${r.last_signal ? `<span class="badge b-${r.last_signal.type}">${esc(r.last_signal.label)}</span> ${r.last_signal.date}` : "-"}</td>
@@ -299,6 +322,105 @@ $("#scan-btn").addEventListener("click", async () => {
   } finally {
     btn.disabled = false;
   }
+});
+
+/* ---------- backtest ---------- */
+let btChart = null;
+const H = [5, 10, 20];
+
+function retCell(st) {
+  if (!st || !st.n) return `<td class="num">-</td>`;
+  const ex = st.excess == null ? "" : `<span class="sub ${st.excess >= 0 ? "up" : "down"}">기준 대비 ${pct(st.excess)}</span>`;
+  return `<td class="num"><b class="${st.mean >= 0 ? "up" : "down"}">${pct(st.mean)}</b>${ex}<span class="sub">승률 ${(st.win_rate * 100).toFixed(0)}% · n=${st.n}</span></td>`;
+}
+
+function renderBacktest(r) {
+  $("#bt-result").hidden = false;
+  const head = (first) => `<thead><tr><th>${first}</th><th class="num">표본</th>${H.map((h) => `<th class="num">${h}일 후</th>`).join("")}</tr></thead>`;
+  const baseRow = `<tr class="baseline"><td>기준 (아무 날이나 매수)</td><td class="num">${r.baseline.r5.n}</td>${H.map((h) => retCell(r.baseline[`r${h}`])).join("")}</tr>`;
+
+  $("#bt-signal").innerHTML = head("신호").replace("</tr></thead>", `<th class="num">MAE(20일)</th></tr></thead>`) + "<tbody>" + baseRow.replace("</tr>", "<td></td></tr>") +
+    (r.by_signal.length ? r.by_signal.map((row) => `<tr>
+      <td><span class="badge b-${row.type}">${esc(row.label)}</span></td>
+      <td class="num">${row.count}</td>
+      ${H.map((h) => retCell(row[`r${h}`])).join("")}
+      <td class="num down">${pct(row.mae20)}</td></tr>`).join("") : `<tr><td colspan="6">발생한 신호가 없습니다</td></tr>`) + "</tbody>";
+
+  $("#bt-score").innerHTML = head("매집 점수") + "<tbody>" + baseRow +
+    r.by_score.map((row) => `<tr><td>${esc(row.bucket)}</td><td class="num">${row.count}</td>${H.map((h) => retCell(row[`r${h}`])).join("")}</tr>`).join("") + "</tbody>";
+
+  const EV_LIMIT = 30;
+  const evCell = (v) => `<td class="num ${v == null ? "" : v >= 0 ? "up" : "down"}">${v == null ? "진행 중" : pct(v)}</td>`;
+  $("#bt-events").innerHTML = `<thead><tr><th>날짜</th><th>종목</th><th>신호</th><th class="num">진입가</th>${H.map((h) => `<th class="num">${h}일 후</th>`).join("")}<th class="num">MAE(20일)</th></tr></thead><tbody>` +
+    (r.events.map((e, i) => `<tr data-ticker="${esc(e.ticker)}"${i >= EV_LIMIT ? ' class="more" hidden' : ""}>
+      <td>${e.date}</td><td>${esc(e.ticker)}</td><td><span class="badge b-${e.type}">${esc(e.label)}</span></td>
+      <td class="num">${fmt(e.price, e.price >= 1000 ? 0 : 2)}</td>${H.map((h) => evCell(e[`r${h}`])).join("")}${evCell(e.mae20)}</tr>`).join("") ||
+      `<tr><td colspan="8">신호가 없습니다</td></tr>`) + "</tbody>" +
+    (r.events.length > EV_LIMIT ? `<tfoot><tr><td colspan="8"><button type="button" class="secondary" id="ev-more">전체 ${r.events.length}건 보기</button></td></tr></tfoot>` : "");
+  $("#ev-more")?.addEventListener("click", (ev) => {
+    $("#bt-events").querySelectorAll("tr.more").forEach((tr) => { tr.hidden = false; });
+    ev.target.closest("tfoot").remove();
+  });
+  $("#bt-events").querySelectorAll("tr[data-ticker]").forEach((tr) => tr.addEventListener("click", () => {
+    $("#ticker").value = tr.dataset.ticker;
+    document.querySelector('.tab[data-tab="single"]').click();
+    analyzeTicker(tr.dataset.ticker);
+  }));
+
+  $("#bt-tickers").innerHTML = "대상: " + r.tickers.map((t) => t.error
+    ? `<span class="down">${esc(t.ticker)} (실패: ${esc(t.error)})</span>`
+    : `${esc(t.name || t.ticker)} ${t.days}일·신호 ${t.signals}건${t.has_flow ? "·수급" : ""}`).join(", ");
+
+  // 단일 종목이면 과거 매집 점수 추이
+  if (btChart) { btChart.remove(); btChart = null; }
+  $("#bt-history-card").hidden = !r.score_history;
+  if (r.score_history) {
+    const el = $("#bt-history");
+    btChart = LightweightCharts.createChart(el, { ...themeOpts(), height: el.clientHeight, leftPriceScale: { visible: true } });
+    const sc = btChart.addHistogramSeries({ priceScaleId: "left", priceLineVisible: false, title: "매집 점수" });
+    sc.setData(r.score_history.map((x) => ({ time: x.date, value: x.score, color: gradeColor(x.score) + "aa" })));
+    btChart.priceScale("left").applyOptions({ scaleMargins: { top: 0.6, bottom: 0 } });
+    btChart.addLineSeries({ color: getComputedStyle(document.documentElement).getPropertyValue("--text").trim(), lineWidth: 2, priceLineVisible: false, title: "종가" })
+      .setData(r.score_history.map((x) => ({ time: x.date, value: x.close })));
+    btChart.timeScale().fitContent();
+  }
+}
+
+async function runBacktest(tickers) {
+  const status = $("#bt-status");
+  if (!tickers.length) return setStatus(status, "종목코드를 입력하세요", true);
+  const btn = $("#bt-btn");
+  btn.disabled = true;
+  const t0 = Date.now();
+  const tick = () => setStatus(status, `${tickers.length}개 종목 백테스트 중… ${Math.round((Date.now() - t0) / 1000)}초 (수급 데이터 수집 때문에 종목당 수 초 걸립니다)`);
+  tick();
+  const timer = setInterval(tick, 500);
+  try {
+    const res = await fetch("/api/backtest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tickers, range: $("#bt-range").value, lookback: +$("#lookback").value, spike: +$("#spike").value, flow: $("#use-flow").checked }),
+    });
+    if (!res.ok) throw new Error(await readError(res));
+    const r = await res.json();
+    renderBacktest(r);
+    clearInterval(timer);
+    setStatus(status, `완료 (${Math.round((Date.now() - t0) / 1000)}초) · 신호 ${r.events.length}건 · 과거 수익률이 미래를 보장하지 않으며, 표본이 수십 건 이하면 우연일 가능성이 큽니다`);
+  } catch (e) {
+    clearInterval(timer);
+    setStatus(status, e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("#bt-btn").addEventListener("click", () => runBacktest($("#bt-list").value.split(/[\s,]+/).map((t) => t.trim()).filter(Boolean)));
+$("#bt-this").addEventListener("click", () => {
+  const t = $("#ticker").value.trim();
+  if (!t) return;
+  $("#bt-list").value = t;
+  document.querySelector('.tab[data-tab="backtest"]').click();
+  runBacktest([t]);
 });
 
 /* ---------- init ---------- */

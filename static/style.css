@@ -127,3 +127,14 @@ tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); 
 
 .guide ul { margin: 0; padding-left: 18px; line-height: 1.7; }
 .disclaimer { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+
+button.secondary {
+  background: transparent; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer;
+}
+.controls label.check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 9px; color: var(--text); }
+.b-smart_money { background: #c2255c; }
+#bt-result { display: flex; flex-direction: column; gap: 16px; }
+#bt-result[hidden], #flow-wrap[hidden], #bt-history-card[hidden] { display: none; }
+td .sub { display: block; color: var(--muted); font-size: 11px; }
+tr.baseline td { background: color-mix(in srgb, var(--muted) 10%, transparent); font-weight: 600; }

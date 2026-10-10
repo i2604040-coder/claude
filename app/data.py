@@ -156,3 +156,58 @@ def demo_data(days: int = 250, seed: int = 7) -> pd.DataFrame:
         price = c
     df = pd.DataFrame(rows, columns=["Date", "Open", "High", "Low", "Close", "Volume"]).set_index("Date")
     return df.round({"Open": 0, "High": 0, "Low": 0, "Close": 0})
+
+
+NAVER_TREND_URL = "https://m.stock.naver.com/api/stock/{code}/trend?pageSize=60{cursor}"
+_FLOW_CACHE: dict[str, tuple[float, pd.DataFrame, int]] = {}  # code -> (시각, 데이터, 요청 일수)
+
+
+def _to_int(s) -> float:
+    try:
+        return float(str(s).replace(",", "").replace("+", ""))
+    except (TypeError, ValueError):
+        return float("nan")
+
+
+def fetch_investor_flow(code: str, days: int = 250) -> pd.DataFrame | None:
+    """국내 종목 투자자별 일별 순매수(주) — 네이버 증권. 실패 시 None (분석은 수급 없이 계속).
+
+    columns: Foreign, Organ, Individual, ForeignHold(%)
+    """
+    code = code.strip()
+    if not re.fullmatch(r"\d{6}", code):
+        return None
+    hit = _FLOW_CACHE.get(code)
+    if hit and time.time() - hit[0] < CACHE_TTL and hit[2] >= days:
+        return hit[1].copy()
+    rows: list[dict] = []
+    cursor = ""
+    complete = True
+    try:
+        while len(rows) < days:
+            req = urllib.request.Request(NAVER_TREND_URL.format(code=code, cursor=cursor),
+                                         headers={"User-Agent": "Mozilla/5.0 (accumulation-tracker)"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                page = json.load(resp)
+            if not page:
+                break
+            rows.extend(page)
+            oldest = page[-1]["bizdate"]
+            cursor = f"&bizdate={oldest}"
+            if len(page) < 60:
+                break
+    except Exception:  # noqa: BLE001
+        complete = False
+        if not rows:
+            return None
+    if not rows:
+        return None
+    df = pd.DataFrame({
+        "Foreign": [_to_int(r.get("foreignerPureBuyQuant")) for r in rows],
+        "Organ": [_to_int(r.get("organPureBuyQuant")) for r in rows],
+        "Individual": [_to_int(r.get("individualPureBuyQuant")) for r in rows],
+        "ForeignHold": [_to_int(str(r.get("foreignerHoldRatio", "")).rstrip("%")) for r in rows],
+    }, index=pd.to_datetime([r["bizdate"] for r in rows], format="%Y%m%d"))
+    df = df[~df.index.duplicated(keep="first")].sort_index()
+    _FLOW_CACHE[code] = (time.time(), df, days if complete else 0)
+    return df.copy()
