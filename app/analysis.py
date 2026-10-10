@@ -5,13 +5,28 @@
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 REQUIRED_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 MIN_BARS = 30
+WEIGHTS_FILE = Path(__file__).resolve().parent / "weights.json"
+# 최초 설계 배점 (백테스트 보정 전)
+LEGACY_WEIGHTS = {"events": 25, "obv": 20, "cmf": 15, "updown": 15, "dry_up": 10, "base": 10, "avwap": 5, "flow": 20}
+
+
+@lru_cache(maxsize=1)
+def load_weights() -> dict:
+    """백테스트로 보정한 배점(app/weights.json)을 읽음. 파일이 없으면 최초 설계 배점."""
+    try:
+        return dict(json.loads(WEIGHTS_FILE.read_text(encoding="utf-8"))["weights"])
+    except (OSError, KeyError, ValueError):
+        return dict(LEGACY_WEIGHTS)
 
 
 @dataclass
@@ -28,6 +43,7 @@ class Params:
     base_window: int = 20
     base_width: float = 0.12         # 박스권 폭(고가-저가)/종가 한도
     flow_ratio: float = 0.08         # 기관·외국인 매집: 20일 순매수 / 거래량 비율 하한
+    weights: dict | None = None      # 점수 항목별 배점. None이면 app/weights.json (없으면 LEGACY_WEIGHTS)
 
 
 @dataclass
@@ -225,80 +241,71 @@ def _anchored_vwap(ind: pd.DataFrame, anchor: int) -> pd.Series:
     return (tp * seg["Volume"]).cumsum() / seg["Volume"].cumsum()
 
 
-def score_accumulation(ind: pd.DataFrame, signals: list[Signal], p: Params) -> tuple[float, list[ScoreItem], dict]:
+def compute_components(ind: pd.DataFrame, signals: list[Signal], p: Params) -> tuple[dict, dict]:
+    """점수 구성 요소를 0~1로 정규화해서 계산. 반환: ({key: (값, 라벨, 근거)}, 요약용 중간값)."""
     win = ind.iloc[-p.lookback:]
     start_date = win.index[0].strftime("%Y-%m-%d")
     recent = [s for s in signals if s.date >= start_date]
-    items: list[ScoreItem] = []
+    comp: dict[str, tuple[float, str, str]] = {}
 
-    # 1. 매집 이벤트 빈도 (25)
-    ev = [s for s in recent if s.type in ("entry", "absorption", "lower_tail")]
-    ev_score = min(25.0, sum(6 + 6 * s.strength for s in ev))
-    items.append(ScoreItem("events", "매집성 거래 이벤트", ev_score, 25,
-                           f"최근 {p.lookback}일 매집봉/진입봉/아래꼬리 {len(ev)}회"))
+    # 매집 이벤트 빈도: 이벤트 1건당 6~12점, 25점에서 포화 (전체 / 유형별)
+    def ev_norm(types: tuple) -> tuple[float, int]:
+        ev = [s for s in recent if s.type in types]
+        return min(1.0, sum(6 + 6 * s.strength for s in ev) / 25), len(ev)
 
-    # 2. OBV 다이버전스 + OBV 추세 (20)
-    # 구간 OBV 순증가분 / 구간 총거래량 (-1 ~ +1)
+    v, n = ev_norm(SPIKE_TYPES)
+    comp["events"] = (v, "매집성 거래 이벤트", f"최근 {p.lookback}일 매집봉/진입봉/아래꼬리 {n}회")
+    for typ in SPIKE_TYPES:
+        v, n = ev_norm((typ,))
+        comp[f"ev_{typ}"] = (v, f"{SIGNAL_LABELS[typ]} 빈도", f"최근 {p.lookback}일 {n}회")
+
+    # OBV 다이버전스: 구간 OBV 순증가분 / 구간 총거래량 (-1 ~ +1)
     obv_trend = float((win["OBV"].iloc[-1] - win["OBV"].iloc[0]) / (win["Volume"].sum() or 1.0))
     price_trend = win["Close"].iloc[-1] / win["Close"].iloc[0] - 1
     div_cnt = sum(1 for s in recent if s.type == "obv_divergence")
-    obv_score = min(20.0, div_cnt * 8 + float(np.clip(obv_trend / 0.3, 0, 1)) * 8 + (4 if obv_trend > 0 and price_trend < 0.05 else 0))
-    items.append(ScoreItem("obv", "OBV 다이버전스", obv_score, 20,
-                           f"OBV 추세 {obv_trend:+.2f}, 주가 {price_trend * 100:+.1f}%, 다이버전스 {div_cnt}회"))
+    obv_v = min(1.0, (div_cnt * 8 + float(np.clip(obv_trend / 0.3, 0, 1)) * 8
+                      + (4 if obv_trend > 0 and price_trend < 0.05 else 0)) / 20)
+    comp["obv"] = (obv_v, "OBV 다이버전스", f"OBV 추세 {obv_trend:+.2f}, 주가 {price_trend * 100:+.1f}%, 다이버전스 {div_cnt}회")
 
-    # 3. CMF 자금 유입 (15)
     cmf = float(ind["CMF"].iloc[-1]) if np.isfinite(ind["CMF"].iloc[-1]) else 0.0
     cmf_avg = float(win["CMF"].dropna().mean()) if win["CMF"].notna().any() else 0.0
-    cmf_score = float(np.clip((cmf_avg + 0.05) / 0.25, 0, 1) * 15)
-    items.append(ScoreItem("cmf", "CMF 자금 유입", cmf_score, 15,
-                           f"현재 CMF {cmf:+.3f}, 구간 평균 {cmf_avg:+.3f}"))
+    comp["cmf"] = (float(np.clip((cmf_avg + 0.05) / 0.25, 0, 1)), "CMF 자금 유입",
+                   f"현재 CMF {cmf:+.3f}, 구간 평균 {cmf_avg:+.3f}")
 
-    # 4. 상승일/하락일 거래량 비 (15)
     udr = float(win["UpDownRatio"].dropna().iloc[-1]) if win["UpDownRatio"].notna().any() else 1.0
-    udr_score = float(np.clip((udr - 0.9) / 1.1, 0, 1) * 15)
-    items.append(ScoreItem("updown", "상승일 거래량 우위", udr_score, 15,
-                           f"최근 20일 상승일/하락일 거래량 비 {udr:.2f}"))
+    comp["updown"] = (float(np.clip((udr - 0.9) / 1.1, 0, 1)), "상승일 거래량 우위",
+                      f"최근 20일 상승일/하락일 거래량 비 {udr:.2f}")
 
-    # 5. 거래량 급감(물량 잠김) (10)
     dry = [s for s in recent if s.type == "dry_up"]
-    dry_score = 10.0 * max((s.strength for s in dry), default=0) / 0.6
-    dry_score = min(10.0, dry_score)
-    items.append(ScoreItem("dry_up", "급증 후 거래량 급감", dry_score, 10,
-                           dry[-1].detail if dry else "해당 없음"))
+    comp["dry_up"] = (min(1.0, max((s.strength for s in dry), default=0) / 0.6), "급증 후 거래량 급감",
+                      dry[-1].detail if dry else "해당 없음")
 
-    # 6. 박스권 수렴 (10)
     base = ind.iloc[-p.base_window:]
     width = float((base["High"].max() - base["Low"].min()) / base["Close"].iloc[-1])
-    base_score = float(np.clip((p.base_width * 2 - width) / p.base_width, 0, 1) * 10)
-    items.append(ScoreItem("base", "박스권 수렴", base_score, 10,
-                           f"최근 {p.base_window}일 변동폭 {width * 100:.1f}%"))
+    comp["base"] = (float(np.clip((p.base_width * 2 - width) / p.base_width, 0, 1)), "박스권 수렴",
+                    f"최근 {p.base_window}일 변동폭 {width * 100:.1f}%")
 
-    # 7. 세력 평단(대량거래일 앵커 VWAP) 위 유지 (5)
     lb = ind.iloc[-max(p.lookback * 2, 60):]
     anchor_label = lb["Volume"].idxmax()
     anchor = ind.index.get_loc(anchor_label)
-    avwap = _anchored_vwap(ind, anchor)
+    avwap_last = float(_anchored_vwap(ind, anchor).iloc[-1])
     last_close = float(ind["Close"].iloc[-1])
-    avwap_last = float(avwap.iloc[-1])
     gap = last_close / avwap_last - 1
-    vwap_score = 5.0 if gap >= 0 else float(np.clip(1 + gap / 0.1, 0, 1) * 2.5)
-    items.append(ScoreItem("avwap", "세력 평단 위 유지", vwap_score, 5,
-                           f"{anchor_label:%Y-%m-%d} 최대거래일 기준 VWAP {avwap_last:,.0f} 대비 {gap * 100:+.1f}%"))
+    comp["avwap"] = (1.0 if gap >= 0 else float(np.clip(1 + gap / 0.1, 0, 1)) * 0.5, "세력 평단 위 유지",
+                     f"{anchor_label:%Y-%m-%d} 최대거래일 기준 VWAP {avwap_last:,.0f} 대비 {gap * 100:+.1f}%")
 
-    # 8. 기관·외국인 수급 (20, 국내 종목 수급 데이터가 있을 때만)
+    # 기관·외국인 수급 (국내 종목 수급 데이터가 있을 때만)
     flow_summary = {}
     if "SmartNet" in ind and win["SmartNet"].notna().sum() >= min(20, len(win)) * 0.8:
         w20 = ind.iloc[-20:]
-        vol20 = w20["Volume"].sum() or 1.0
-        r20 = float(w20["SmartNet"].sum() / vol20)
+        r20 = float(w20["SmartNet"].sum() / (w20["Volume"].sum() or 1.0))
         r_lb = float(win["SmartNet"].sum() / (win["Volume"].sum() or 1.0))
         hold = win["ForeignHold"].dropna()
         hold_chg = float(hold.iloc[-1] - hold.iloc[0]) if len(hold) >= 2 else 0.0
-        flow_score = (float(np.clip(r20 / 0.08, 0, 1)) * 10 + float(np.clip(r_lb / 0.05, 0, 1)) * 6
-                      + (4.0 if hold_chg > 0 else 0.0))
-        items.append(ScoreItem("flow", "기관·외국인 순매수", flow_score, 20,
-                               f"20일 순매수 = 거래량의 {r20 * 100:+.1f}%, {p.lookback}일 {r_lb * 100:+.1f}%, "
-                               f"외국인 지분율 {hold_chg:+.2f}%p"))
+        comp["flow"] = ((float(np.clip(r20 / 0.08, 0, 1)) * 10 + float(np.clip(r_lb / 0.05, 0, 1)) * 6
+                         + (4.0 if hold_chg > 0 else 0.0)) / 20, "기관·외국인 순매수",
+                        f"20일 순매수 = 거래량의 {r20 * 100:+.1f}%, {p.lookback}일 {r_lb * 100:+.1f}%, "
+                        f"외국인 지분율 {hold_chg:+.2f}%p")
         flow_summary = {
             "foreign_20": float(w20["Foreign"].sum()),
             "organ_20": float(w20["Organ"].sum()),
@@ -308,10 +315,24 @@ def score_accumulation(ind: pd.DataFrame, signals: list[Signal], p: Params) -> t
             "foreign_hold_change": hold_chg,
         }
 
+    extra = {"recent": recent, "lb": lb, "cmf": cmf, "udr": udr, "anchor_label": anchor_label,
+             "avwap_last": avwap_last, "last_close": last_close, "flow_summary": flow_summary}
+    return comp, extra
+
+
+def score_accumulation(ind: pd.DataFrame, signals: list[Signal], p: Params) -> tuple[float, list[ScoreItem], dict]:
+    comp, x = compute_components(ind, signals, p)
+    weights = p.weights if p.weights is not None else load_weights()
+    items = [ScoreItem(k, comp[k][1], comp[k][0] * w, w, comp[k][2])
+             for k, w in weights.items() if w > 0 and k in comp]
     max_total = sum(i.max_score for i in items)
-    total = round(sum(i.score for i in items) / max_total * 100, 1)
+    total = round(sum(i.score for i in items) / max_total * 100, 1) if max_total else 0.0
     for it in items:
         it.score = round(it.score, 1)
+        it.max_score = round(it.max_score, 1)
+    recent, lb, last_close = x["recent"], x["lb"], x["last_close"]
+    anchor_label, avwap_last, cmf, udr = x["anchor_label"], x["avwap_last"], x["cmf"], x["udr"]
+    flow_summary = x["flow_summary"]
 
     # 매집 신호일들의 거래량가중 평균가 = 추정 세력 평단 (최근 lookback*2 구간)
     cost_start = lb.index[0].strftime("%Y-%m-%d")
@@ -336,6 +357,7 @@ def score_accumulation(ind: pd.DataFrame, signals: list[Signal], p: Params) -> t
         "recent_signal_count": len(recent),
         "lookback": p.lookback,
         "flow": flow_summary or None,
+        "components": {k: round(v[0], 4) for k, v in comp.items()},
     }
     return total, items, summary
 

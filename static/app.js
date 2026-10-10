@@ -18,6 +18,7 @@ const SIGNAL_COLORS = {
   entry: "#e03131", absorption: "#f08c00", lower_tail: "#7048e8", obv_divergence: "#1098ad", dry_up: "#2f9e44", smart_money: "#c2255c",
 };
 const SIGNAL_SHORT = { entry: "진입", absorption: "흡수", lower_tail: "꼬리", obv_divergence: "OBV", dry_up: "잠김", smart_money: "수급" };
+const SIGNAL_NAMES = { entry: "세력 진입봉", absorption: "흡수형 매집봉", lower_tail: "아래꼬리 매집", obv_divergence: "OBV 상승 다이버전스", smart_money: "기관·외국인 매집", dry_up: "거래량 급감" };
 const ABOVE_TYPES = new Set(["obv_divergence", "dry_up", "smart_money"]);
 
 function gradeClass(score) {
@@ -179,6 +180,9 @@ function renderResult(data) {
   $("#grade").className = `grade ${gradeClass(score)}`;
   $("#gauge-fill").style.width = `${score}%`;
   $("#gauge-fill").style.background = gradeColor(score);
+  $("#score-note").textContent = EVIDENCE
+    ? `매집 패턴의 강도이며, ${EVIDENCE.universe}종목·5년 검증에서 이 점수의 수익 예측력은 확인되지 않았습니다 (백테스트 탭 참고).`
+    : "";
 
   const kpi = (k, v, sub = "", cls = "") => `<div class="kpi"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="s">${sub}</div></div>`;
   $("#kpis").innerHTML = [
@@ -214,8 +218,9 @@ function renderResult(data) {
       <td class="num">${fmt(sig.price, PD)}</td>
       <td class="num">${fmtVol(sig.volume)}</td>
       <td class="wrap">${esc(sig.detail)}</td>
+      <td>${verdictHtml(sig.type)}</td>
     </tr>`).join("");
-  $("#signals tbody").innerHTML = rows || `<tr><td colspan="6">탐지된 신호가 없습니다</td></tr>`;
+  $("#signals tbody").innerHTML = rows || `<tr><td colspan="7">탐지된 신호가 없습니다</td></tr>`;
   $("#signals tbody").querySelectorAll("tr[data-date]").forEach((tr) => tr.addEventListener("click", () => focusDate(tr.dataset.date)));
 
   renderCharts(data);
@@ -323,6 +328,43 @@ $("#scan-btn").addEventListener("click", async () => {
     btn.disabled = false;
   }
 });
+
+/* ---------- 대규모 검증 근거 ---------- */
+let EVIDENCE = null;
+
+function verdictOf(type) {
+  const tr = EVIDENCE?.train.by_type[type], te = EVIDENCE?.test.by_type[type];
+  if (!tr || !te) return null;
+  const same = Math.sign(tr.mean_excess) === Math.sign(te.mean_excess);
+  const sig = same && Math.abs(tr.t) >= 2 && Math.abs(te.t) >= 2;
+  const kind = sig ? (te.mean_excess > 0 ? "pos" : "neg") : "none";
+  return { kind, tr, te, label: { pos: "검증됨 ▲", neg: "역신호 ▼", none: "효과 불분명" }[kind] };
+}
+
+function verdictHtml(type) {
+  const v = verdictOf(type);
+  if (!v) return type === "dry_up" ? `<span class="hint">검증 대상 아님</span>` : "-";
+  return `<span class="verdict v-${v.kind}">${v.label}</span><span class="sub">최근 ${pct(v.te.mean_excess)} (n=${v.te.n.toLocaleString()})</span>`;
+}
+
+function renderEvidence() {
+  if (!EVIDENCE) return;
+  $("#evidence-card").hidden = false;
+  $("#evidence-meta").textContent = `${EVIDENCE.universe}종목 · 학습 ${EVIDENCE.train.period.join("~")} · 검증 ${EVIDENCE.test.period.join("~")} · ${EVIDENCE.horizon}거래일 보유`;
+  const cell = (x) => `<td class="num"><b class="${x.mean_excess >= 0 ? "up" : "down"}">${pct(x.mean_excess, 2)}</b><span class="sub">t=${x.t.toFixed(1)} · 시장 이긴 비율 ${(x.win_vs_mkt * 100).toFixed(0)}% · n=${x.n.toLocaleString()}</span></td>`;
+  const types = Object.keys(EVIDENCE.test.by_type);
+  $("#evidence-table").innerHTML = `<thead><tr><th>신호</th><th class="num">학습 구간</th><th class="num">검증 구간</th><th>판정</th></tr></thead><tbody>` +
+    types.map((t) => {
+      const v = verdictOf(t);
+      return `<tr><td><span class="badge b-${t}">${esc(SIGNAL_NAMES[t] || t)}</span></td>${cell(v.tr)}${cell(v.te)}<td><span class="verdict v-${v.kind}">${v.label}</span></td></tr>`;
+    }).join("") + "</tbody>";
+  const sc = EVIDENCE.score;
+  $("#evidence-score").textContent = `종합 매집 점수의 예측력(날짜별 순위상관 IC): 학습 ${sc.legacy_ic_train.toFixed(3)} (t=${sc.legacy_t_train.toFixed(1)}), 검증 ${sc.legacy_ic_test.toFixed(3)} (t=${sc.legacy_t_test.toFixed(1)}) — 0과 구별되지 않습니다.`;
+}
+
+fetch("/api/evidence").then((r) => r.json()).then((e) => {
+  if (e && e.train) { EVIDENCE = e; renderEvidence(); if (window.__lastData) renderResult(window.__lastData); }
+}).catch(() => {});
 
 /* ---------- backtest ---------- */
 let btChart = null;

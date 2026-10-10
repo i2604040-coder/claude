@@ -1,7 +1,9 @@
 """FastAPI 웹 서버: 세력 매집 흔적 탐지 API + 정적 대시보드."""
 from __future__ import annotations
 
+import json
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
@@ -14,6 +16,16 @@ from .backtest import score_samples, signal_events, summarize
 from .data import DataError, fetch_investor_flow, fetch_ticker, parse_csv
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+EVIDENCE_FILE = Path(__file__).resolve().parent / "signal_evidence.json"
+
+
+@lru_cache(maxsize=1)
+def load_evidence() -> dict | None:
+    """research/calibrate.py가 만든 신호 유형별 대규모 백테스트 결과 (없으면 None)."""
+    try:
+        return json.loads(EVIDENCE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 app = FastAPI(title="세력 매집 탐지기", version="1.0.0")
 
@@ -41,6 +53,11 @@ def api_analyze(
     except (DataError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"info": info, **result_to_json(res)}
+
+
+@app.get("/api/evidence")
+def api_evidence():
+    return load_evidence() or {}
 
 
 @app.post("/api/upload")

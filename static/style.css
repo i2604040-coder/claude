@@ -138,3 +138,10 @@ button.secondary {
 #bt-result[hidden], #flow-wrap[hidden], #bt-history-card[hidden] { display: none; }
 td .sub { display: block; color: var(--muted); font-size: 11px; }
 tr.baseline td { background: color-mix(in srgb, var(--muted) 10%, transparent); font-weight: 600; }
+
+.score-note { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.verdict { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 6px; border: 1px solid currentColor; }
+.v-pos { color: var(--up); }
+.v-neg { color: var(--down); }
+.v-none { color: var(--muted); }
+#evidence-card[hidden] { display: none; }

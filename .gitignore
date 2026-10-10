@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+research/.cache/
+research/results/samples.pkl
+research/.cache_collect.log

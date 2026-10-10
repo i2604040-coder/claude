@@ -54,6 +54,7 @@
             <div class="gauge"><div class="gauge-fill" id="gauge-fill"></div></div>
             <div class="score-row"><span id="score">0</span><span class="max">/100</span></div>
             <div class="grade" id="grade"></div>
+            <div class="score-note" id="score-note"></div>
           </div>
           <div class="card kpis" id="kpis"></div>
           <div class="card breakdown">
@@ -83,7 +84,7 @@
           <h3>매집 신호 내역 <span class="hint">행을 누르면 차트가 해당 날짜로 이동</span></h3>
           <div class="table-wrap">
             <table id="signals">
-              <thead><tr><th>날짜</th><th>신호</th><th>강도</th><th>종가</th><th>거래량</th><th>근거</th></tr></thead>
+              <thead><tr><th>날짜</th><th>신호</th><th>강도</th><th>종가</th><th>거래량</th><th>근거</th><th>과거 검증 <span class="hint">(20일 시장 대비)</span></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -131,6 +132,13 @@
         <div id="bt-status" class="status"></div>
       </div>
 
+      <div class="card" id="evidence-card" hidden>
+        <h3>대규모 검증 결과 <span class="hint" id="evidence-meta"></span></h3>
+        <p class="hint">신호가 나온 날 종가에 사서 20거래일 보유했을 때, 같은 기간 유니버스 평균 대비 초과수익. 학습 구간과 검증 구간에서 같은 방향으로 유의(|t|≥2)할 때만 '검증됨'으로 표시합니다.</p>
+        <div class="table-wrap"><table id="evidence-table"></table></div>
+        <p class="hint" id="evidence-score"></p>
+      </div>
+
       <div id="bt-result" hidden>
         <div class="card">
           <h3>신호별 성과 <span class="hint">평균 수익률 · (기준 대비 초과) · 승률 &nbsp;|&nbsp; MAE = 20일 내 진입가 대비 평균 최대 낙폭</span></h3>
@@ -163,6 +171,7 @@
         <li><b>기관·외국인 매집</b> — 국내 종목 한정. 20일간 주가는 횡보·하락인데 기관+외국인 순매수가 같은 기간 거래량의 8% 이상. 매집 점수에도 수급 항목(20점)이 추가되고 100점 만점으로 환산됩니다.</li>
         <li><b>추정 세력 평단</b> — 최근 매집 신호일 종가의 거래량가중 평균. 현재가가 이 아래로 크게 내려가면 매집 가설이 약해집니다.</li>
       </ul>
+      <p class="hint">각 신호의 300종목·5년 검증 결과는 신호 내역의 '과거 검증' 열과 백테스트 탭에서 볼 수 있습니다. 현재 두 구간 모두에서 유의했던 것은 세력 진입봉(+)과 기관·외국인 매집(−, 역신호)뿐입니다.</p>
       <p class="disclaimer">본 도구는 거래량 패턴에 기반한 통계적 추정이며 투자 권유가 아닙니다. 실제 세력 여부는 수급(기관·외국인·프로그램) 데이터와 공시를 함께 확인하세요.</p>
     </section>
   </main>

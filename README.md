@@ -58,11 +58,27 @@ uvicorn app.main:app --reload --port 8000
 
 주의: 표본이 수십 건 이하면 우연일 가능성이 크고, 20일 보유 구간이 겹치는 신호는 서로 독립적이지 않습니다. 직접 고른 종목 목록이라 생존 편향도 있을 수 있습니다.
 
+## 대규모 검증 · 가중치 보정
+
+`research/` 폴더에서 300종목(코스피 100 + 코스닥 200) × 5년 데이터로 점수 항목과 신호의 실제 예측력을 검증합니다.
+
+```bash
+python -m research.collect      # 시세·수급 수집 (research/.cache, 약 13분)
+python -m research.calibrate    # 학습(~2024-09)/검증(2024-10~) 분리 평가, app/signal_evidence.json 갱신
+python -m research.calibrate --write   # 검증 통과 시에만 app/weights.json 갱신
+```
+
+결과 요약은 [research/REPORT.md](research/REPORT.md)에 있습니다. 핵심:
+- 종합 매집 점수의 20일 수익 예측력은 확인되지 않았고, IC 비례로 다시 계산한 배점도 검증 구간을 통과하지 못해 **배점은 바꾸지 않았습니다**.
+- 신호별로는 **세력 진입봉**만 두 구간 모두 시장 대비 양(+)의 초과수익(+1.4%, +2.6%)을 보였고, **기관·외국인 매집**은 두 구간 모두 음(−)(−1.1%, −1.2%)이었습니다.
+- 화면의 신호 내역과 백테스트 탭에 이 검증 결과가 표시됩니다.
+
 ## API
 
 - `GET /api/analyze?ticker=005930&range=1y&lookback=60&spike=2.5`
 - `POST /api/upload` (multipart `file`)
 - `POST /api/scan` `{"tickers": ["005930", "000660"], "range": "1y"}`
+- `GET /api/evidence` (대규모 검증 결과)
 - `POST /api/backtest` `{"tickers": ["005930", "000660"], "range": "2y", "flow": true}`
 - 모든 분석 API는 `flow`(기본 true)로 국내 수급 반영 여부를 지정합니다
 
