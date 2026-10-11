@@ -1,0 +1,451 @@
+<title>매매기법 21종 검증</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@700;800&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 단일 읽기 칼럼(최대 960px) — 결론 → 차트 3개 → 전체 표 → 방법. 숫자는 고정폭, 시장은 파랑(한국)·주황(나스닥) 두 색으로만 구분 */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #0f1419;
+  --ink-2: #4a5360;
+  --ink-3: #7b8491;
+  --rule: #e2e5ea;
+  --grid: #eceef2;
+  --kr: #2a78d6;
+  --nq: #eb6834;
+  --pos: #1d7a46;
+  --neg: #b4362f;
+  --hl: #fff3c4;
+  --font-display: "Gothic A1", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --surface: #181c21; --ink: #eef0f3; --ink-2: #b4bcc7; --ink-3: #87909c;
+    --rule: #2a3038; --grid: #222830; --kr: #3987e5; --nq: #d95926; --pos: #4cb87a; --neg: #e5736b; --hl: #3a3215;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111418; --surface: #181c21; --ink: #eef0f3; --ink-2: #b4bcc7; --ink-3: #87909c;
+  --rule: #2a3038; --grid: #222830; --kr: #3987e5; --nq: #d95926; --pos: #4cb87a; --neg: #e5736b; --hl: #3a3215;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.65; }
+.wrap { max-width: 960px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; display: flex; flex-direction: column; gap: 56px; }
+h1, h2 { font-family: var(--font-display); text-wrap: balance; letter-spacing: -0.01em; margin: 0; }
+h1 { font-size: clamp(28px, 5vw, 44px); line-height: 1.2; font-weight: 800; }
+h2 { font-size: 22px; line-height: 1.35; font-weight: 800; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.lede { font-size: 17px; color: var(--ink-2); }
+header { display: flex; flex-direction: column; gap: 18px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); }
+.fact { padding: 16px 16px 16px 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fact + .fact { padding-left: 16px; border-left: 1px solid var(--rule); }
+.fact b { font-family: var(--font-mono); font-size: 26px; font-weight: 500; letter-spacing: -0.02em; }
+.fact span { color: var(--ink-2); font-size: 13px; }
+@media (max-width: 720px) { .fact + .fact { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); } }
+section { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.sec-head { display: flex; flex-direction: column; gap: 6px; }
+.note { color: var(--ink-3); font-size: 13px; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px; min-width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--ink-2); align-items: center; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.swatch.line { width: 16px; height: 2px; border-radius: 1px; }
+.swatch.dash { width: 16px; height: 0; border-top: 2px dashed var(--ink-3); border-radius: 0; }
+
+/* 차트 A: 기법별 알파 점 + 신뢰구간 */
+.dots { display: grid; grid-template-columns: minmax(150px, 210px) 1fr; column-gap: 12px; }
+.dots .lab { font-size: 13px; padding: 5px 0; line-height: 1.3; border-top: 1px solid var(--grid); display: flex; align-items: center; min-width: 0; }
+.dots .trk { border-top: 1px solid var(--grid); min-width: 0; }
+.dots .trk svg { display: block; width: 100%; height: 34px; overflow: visible; }
+.dots .axis svg { display: block; width: 100%; height: 22px; overflow: visible; }
+.dots .mine { font-weight: 600; }
+@media (max-width: 560px) {
+  .dots { grid-template-columns: 1fr; }
+  .dots .lab { border-top: 1px solid var(--grid); padding-bottom: 0; }
+  .dots .trk { border-top: 0; }
+  .dots .axis-pad { display: none; }
+}
+svg text { fill: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+.hit { fill: transparent; cursor: pointer; }
+
+/* 툴팁 */
+.tip { position: fixed; z-index: 10; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 16px rgb(0 0 0 / 0.12); max-width: 260px; }
+.tip b { font-weight: 600; }
+.tip .r { display: flex; justify-content: space-between; gap: 12px; }
+.tip .r span:last-child { font-family: var(--font-mono); }
+
+/* 컨트롤 */
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.seg button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--ink-2); padding: 6px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+select { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; max-width: 100%; }
+button:focus-visible, select:focus-visible, th:focus-visible { outline: 2px solid var(--kr); outline-offset: 2px; }
+
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.statline { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 13px; color: var(--ink-2); }
+.statline b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); }
+
+/* 표 */
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 760px; }
+th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+td:last-child, th:last-child { text-align: left; }
+th { font-weight: 600; color: var(--ink-2); font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--surface); }
+th[aria-sort="descending"]::after { content: " ↓"; }
+th[aria-sort="ascending"]::after { content: " ↑"; }
+td.n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.pos { color: var(--pos); }
+.neg { color: var(--neg); }
+.chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid currentColor; }
+tr.mine td:first-child { font-weight: 600; }
+.desc { color: var(--ink-3); font-size: 11px; display: block; white-space: normal; max-width: 260px; }
+ul.plain { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+footer { border-top: 1px solid var(--rule); padding-top: 16px; color: var(--ink-3); font-size: 12px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">백테스트 리포트 · 2026년 10월</span>
+    <h1>유명 매매기법 21개를 5년치로 돌려봤다. 시장을 확실히 이긴 기법은 없었다</h1>
+    <p class="lede">골든크로스, RSI, 볼린저밴드, 52주 신고가, 세력 진입봉까지. 한국 293종목과 나스닥 478종목에 똑같은 규칙을 적용했습니다. 신호 다음 날 시가에 사서 20거래일 보유하고, 거래비용(한국 0.3%, 미국 0.1%)을 뺐습니다.</p>
+    <div class="facts">
+      <div class="fact"><b>0 / 21</b><span>여러 기법을 동시에 시험한 점을 보정하면, 두 시장 어디서도 통계적으로 시장을 이긴 기법 수</span></div>
+      <div class="fact"><b id="f-rsi">55% · −12%</b><span>RSI 과매도 탈출(한국): 20일 승률은 상위권인데 연 알파는 꼴찌</span></div>
+      <div class="fact"><b id="f-same">16 / 21</b><span>한국과 나스닥에서 알파의 부호(+/−)가 같았던 기법 수</span></div>
+    </div>
+  </header>
+
+  <section id="alpha">
+    <div class="sec-head">
+      <h2>기법별 연간 알파</h2>
+      <p class="note">알파는 시장 움직임(베타)을 뺀 뒤 남는 연 초과수익입니다. 가로선은 95% 신뢰구간이고, 선이 0을 가로지르면 우연과 구별되지 않습니다. 기법 21개 × 시장 2개를 한꺼번에 시험했으므로 엄밀하게는 이 선보다 1.65배 넓은 구간이 0을 벗어나야 합니다.</p>
+    </div>
+    <div class="legend">
+      <span class="key"><span class="swatch" style="background:var(--kr)"></span>한국 (코스피·코스닥)</span>
+      <span class="key"><span class="swatch" style="background:var(--nq)"></span>나스닥</span>
+      <span class="key"><span class="swatch line" style="background:var(--ink-3)"></span>95% 신뢰구간</span>
+    </div>
+    <div class="panel"><div class="dots" id="dots"></div></div>
+  </section>
+
+  <section id="winrate">
+    <div class="sec-head">
+      <h2>승률이 높다고 돈을 버는 건 아니다</h2>
+      <p class="note">가로축은 신호 후 20일 동안 오른 비율, 세로축은 연 알파입니다. 저점매수형 기법은 자주 맞히지만 크게 지는 날이 있어 오른쪽 아래에 모입니다.</p>
+    </div>
+    <div class="legend">
+      <span class="key"><span class="swatch" style="background:var(--kr)"></span>한국</span>
+      <span class="key"><span class="swatch" style="background:var(--nq)"></span>나스닥</span>
+    </div>
+    <div class="panel chart" id="scatter"></div>
+  </section>
+
+  <section id="equity">
+    <div class="sec-head">
+      <h2>기법별 수익 곡선</h2>
+      <p class="note">1원을 넣었을 때의 누적 가치입니다. 회색은 같은 종목들을 똑같은 비중으로 산 시장입니다.</p>
+    </div>
+    <div class="controls">
+      <div class="seg" id="eq-market" role="group" aria-label="시장 선택">
+        <button type="button" data-m="kr" aria-pressed="true">한국</button>
+        <button type="button" data-m="nasdaq" aria-pressed="false">나스닥</button>
+      </div>
+      <label class="note" for="eq-tech">기법</label>
+      <select id="eq-tech"></select>
+    </div>
+    <div class="legend">
+      <span class="key"><span class="swatch line" id="eq-key" style="background:var(--kr)"></span><span id="eq-key-label">전략</span></span>
+      <span class="key"><span class="swatch line" style="background:var(--ink-3)"></span>시장 (동일비중)</span>
+    </div>
+    <div class="panel chart" id="eqchart"></div>
+    <div class="statline" id="eq-stats"></div>
+  </section>
+
+  <section id="table">
+    <div class="sec-head">
+      <h2>전체 결과</h2>
+      <p class="note">열 이름을 누르면 정렬됩니다. 학습 구간은 2024년 9월까지, 검증 구간은 2024년 10월 이후입니다.</p>
+    </div>
+    <div class="controls">
+      <div class="seg" id="tb-market" role="group" aria-label="표 시장 선택">
+        <button type="button" data-m="kr" aria-pressed="true">한국</button>
+        <button type="button" data-m="nasdaq" aria-pressed="false">나스닥</button>
+      </div>
+    </div>
+    <div class="panel tbl"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="method">
+    <div class="sec-head"><h2>어떻게 검증했나</h2></div>
+    <ul class="plain">
+      <li><b>대상</b>: 한국은 코스피 시가총액 상위 100 + 코스닥 상위 200(보통주), 나스닥은 시가총액 상위 500(스팩·워런트·우선주·ADR 제외). 2021년 10월부터 5년치 일봉.</li>
+      <li><b>매매 규칙</b>: 신호가 뜬 날 장 마감 후 확인하고, 다음 날 시가에 매수, 20거래일 뒤 종가에 매도. 왕복 거래비용 한국 0.3%, 미국 0.1%.</li>
+      <li><b>포트폴리오</b>: 매일 보유 중인 신호 종목을 모두 같은 비중으로 들고 있다고 계산. 신호가 없는 날은 현금. 같은 날 신호가 몰려도 통계가 부풀지 않습니다.</li>
+      <li><b>알파</b>: 전략의 일별 수익률을 시장(같은 종목 동일비중) 수익률에 회귀해 시장 노출(베타)을 뺀 나머지. t값이 2를 넘으면 우연일 가능성이 5% 미만입니다. 42번을 시험했으므로 엄밀한 기준은 3.24입니다.</li>
+      <li><b>구간 분리</b>: 학습(2021-10~2024-09)과 검증(2024-10~2026-10) 두 구간에서 같은 방향인지 따로 확인했습니다.</li>
+      <li><b>한계</b>: 지금 시가총액 상위 종목만 썼으므로 그동안 망한 종목이 빠져 있습니다(생존 편향). 그래서 '시장' 수익률(한국 연 35%)이 실제 지수보다 훨씬 높습니다. 기법끼리의 비교는 같은 조건이라 유효합니다. 기법 정의는 가장 흔한 설정 하나만 썼고, 손절·익절 규칙은 넣지 않았습니다.</li>
+    </ul>
+    <footer>투자 권유가 아닌 과거 데이터 검증 결과입니다. 과거 성과는 미래 수익을 보장하지 않습니다. 데이터: Yahoo Finance 일봉, Nasdaq 상장 목록, 네이버 증권 종목 목록.</footer>
+  </section>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const DATA = __DATA__;
+const MINE = new Set(["entry", "obv_div"]);
+const KEYS = Object.keys(DATA.techs);
+const MK = { kr: "한국", nasdaq: "나스닥" };
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const pct = (x, d = 1) => (x == null || !isFinite(x) ? "–" : `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(d)}%`);
+const pctU = (x, d = 0) => (x == null || !isFinite(x) ? "–" : `${(x * 100).toFixed(d)}%`);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+
+/* ---------- 툴팁 ---------- */
+const tip = document.getElementById("tip");
+function showTip(html, ev) {
+  tip.innerHTML = html;
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - 14;
+  if (y + h > innerHeight - 8) y = ev.clientY - h - 14;
+  tip.style.left = `${Math.max(8, x)}px`;
+  tip.style.top = `${Math.max(8, y)}px`;
+}
+const hideTip = () => { tip.hidden = true; };
+const row = (k, v) => `<div class="r"><span>${k}</span><span>${v}</span></div>`;
+function techTip(k, m) {
+  const t = DATA.techs[k], r = t[m];
+  return `<b>${esc(t.name)}</b> · ${MK[m]}` + row("연 알파", pct(r.alpha)) + row("t값", r.t.toFixed(1)) +
+    row("학습 / 검증", `${pct(r.tr)} / ${pct(r.te)}`) + row("20일 승률", pctU(r.win)) + row("신호 수", r.n.toLocaleString());
+}
+
+/* ---------- 헤드라인 숫자 (데이터에서 계산) ---------- */
+(() => {
+  const r = DATA.techs.rsi_30.kr;
+  document.getElementById("f-rsi").textContent = `${pctU(r.win)} · ${pct(r.alpha, 0)}`;
+  const same = KEYS.filter((k) => Math.sign(DATA.techs[k].kr.alpha) === Math.sign(DATA.techs[k].nasdaq.alpha)).length;
+  document.getElementById("f-same").textContent = `${same} / ${KEYS.length}`;
+})();
+
+/* ---------- 차트 A: 알파 점 + 95% 구간 ---------- */
+function drawDots() {
+  const box = document.getElementById("dots");
+  box.innerHTML = "";
+  const order = [...KEYS].sort((a, b) => (DATA.techs[b].kr.alpha + DATA.techs[b].nasdaq.alpha) - (DATA.techs[a].kr.alpha + DATA.techs[a].nasdaq.alpha));
+  const ci = (r) => { const se = Math.abs(r.alpha / r.t); return [r.alpha - 1.96 * se, r.alpha + 1.96 * se]; };
+  let lo = 0, hi = 0;
+  for (const k of KEYS) for (const m of ["kr", "nasdaq"]) { const [a, b] = ci(DATA.techs[k][m]); lo = Math.min(lo, a); hi = Math.max(hi, b); }
+  lo = Math.floor(lo * 10) / 10; hi = Math.ceil(hi * 10) / 10;
+  const W = 600;
+  const X = (v) => ((v - lo) / (hi - lo)) * W;
+  const ticks = [];
+  for (let v = lo; v <= hi + 1e-9; v += 0.1) ticks.push(Math.round(v * 10) / 10);
+
+  const axis = (top) => {
+    const pad = document.createElement("div"); pad.className = "axis-pad"; box.appendChild(pad);
+    const d = document.createElement("div"); d.className = "axis"; box.appendChild(d);
+    const s = el("svg", { viewBox: `0 0 ${W} 22`, preserveAspectRatio: "none" }, d);
+    for (const v of ticks) {
+      const t = el("text", { x: X(v), y: top ? 14 : 16, "text-anchor": "middle" }, s);
+      t.textContent = v === 0 ? "0" : `${v > 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(0)}%`;
+    }
+  };
+  axis(true);
+  for (const k of order) {
+    const t = DATA.techs[k];
+    const lab = document.createElement("div");
+    lab.className = "lab" + (MINE.has(k) ? " mine" : "");
+    lab.textContent = t.name;
+    box.appendChild(lab);
+    const trk = document.createElement("div"); trk.className = "trk"; box.appendChild(trk);
+    const s = el("svg", { viewBox: `0 0 ${W} 34`, preserveAspectRatio: "none" }, trk);
+    for (const v of ticks) el("line", { x1: X(v), x2: X(v), y1: 0, y2: 34, stroke: v === 0 ? css("--ink-3") : css("--grid"), "stroke-width": v === 0 ? 1.5 : 1, "vector-effect": "non-scaling-stroke" }, s);
+    [["kr", 11, "--kr"], ["nasdaq", 23, "--nq"]].forEach(([m, y, c]) => {
+      const r = t[m];
+      const [a, b] = ci(r);
+      el("line", { x1: X(a), x2: X(b), y1: y, y2: y, stroke: css(c), "stroke-width": 2, "stroke-linecap": "round", opacity: 0.55, "vector-effect": "non-scaling-stroke" }, s);
+      const dot = document.createElement("span");
+      dot.setAttribute("style", `position:absolute;left:calc(${(X(r.alpha) / W) * 100}% - 5px);top:${y - 5}px;width:10px;height:10px;border-radius:50%;background:var(${c});box-shadow:0 0 0 2px var(--surface);cursor:pointer`);
+      dot.setAttribute("tabindex", "0");
+      dot.setAttribute("aria-label", `${t.name} ${MK[m]} 연 알파 ${pct(r.alpha)}`);
+      dot.addEventListener("mousemove", (ev) => showTip(techTip(k, m), ev));
+      dot.addEventListener("mouseleave", hideTip);
+      dot.addEventListener("focus", (ev) => { const b = ev.target.getBoundingClientRect(); showTip(techTip(k, m), { clientX: b.right, clientY: b.bottom }); });
+      dot.addEventListener("blur", hideTip);
+      trk.style.position = "relative";
+      trk.appendChild(dot);
+    });
+  }
+  axis(false);
+}
+
+/* ---------- 차트 B: 승률 vs 알파 ---------- */
+function drawScatter() {
+  const host = document.getElementById("scatter");
+  host.innerHTML = "";
+  const W = 720, Hh = 400, m = { l: 56, r: 16, t: 14, b: 40 };
+  const pts = [];
+  for (const k of KEYS) for (const mk of ["kr", "nasdaq"]) pts.push({ k, mk, x: DATA.techs[k][mk].win, y: DATA.techs[k][mk].alpha });
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const x0 = Math.floor(Math.min(...xs) * 100 - 1) / 100, x1 = Math.ceil(Math.max(...xs) * 100 + 1) / 100;
+  const y0 = Math.floor(Math.min(...ys) * 20) / 20, y1 = Math.ceil(Math.max(...ys) * 20) / 20;
+  const X = (v) => m.l + ((v - x0) / (x1 - x0)) * (W - m.l - m.r);
+  const Y = (v) => m.t + (1 - (v - y0) / (y1 - y0)) * (Hh - m.t - m.b);
+  const s = el("svg", { viewBox: `0 0 ${W} ${Hh}`, role: "img", "aria-label": "기법별 20일 승률과 연 알파 산점도" }, host);
+  for (let v = y0; v <= y1 + 1e-9; v += 0.05) {
+    const vv = Math.round(v * 100) / 100;
+    el("line", { x1: m.l, x2: W - m.r, y1: Y(vv), y2: Y(vv), stroke: vv === 0 ? css("--ink-3") : css("--grid"), "stroke-width": vv === 0 ? 1.5 : 1 }, s);
+    const t = el("text", { x: m.l - 8, y: Y(vv) + 4, "text-anchor": "end" }, s);
+    t.textContent = vv === 0 ? "0" : `${vv > 0 ? "+" : "−"}${Math.abs(vv * 100).toFixed(0)}%`;
+  }
+  for (let v = Math.ceil(x0 * 100); v <= x1 * 100 + 1e-9; v += 2) {
+    const t = el("text", { x: X(v / 100), y: Hh - m.b + 18, "text-anchor": "middle" }, s);
+    t.textContent = `${v}%`;
+  }
+  const xl = el("text", { x: (m.l + W - m.r) / 2, y: Hh - 4, "text-anchor": "middle" }, s); xl.textContent = "신호 후 20일 승률";
+  const yl = el("text", { x: 12, y: (m.t + Hh - m.b) / 2, "text-anchor": "middle", transform: `rotate(-90 12 ${(m.t + Hh - m.b) / 2})` }, s); yl.textContent = "연 알파";
+  // 이야기에 필요한 점만 이름표 (겹치면 위아래로 비켜 놓고, 그래도 겹치면 생략)
+  const LABEL = { "rsi_30:kr": 1, "bb_lower:kr": 1, "entry:nasdaq": 1, "hammer:nasdaq": 1, "dc_50_200:nasdaq": 1, "entry:kr": 1 };
+  const placed = [];
+  const free = (x, y, w, right) => {
+    const a = right ? x : x - w, b = right ? x + w : x;
+    return !placed.some((q) => Math.abs(q.y - y) < 14 && a < q.b && b > q.a);
+  };
+  for (const p of pts) {
+    const c = css(p.mk === "kr" ? "--kr" : "--nq");
+    el("circle", { cx: X(p.x), cy: Y(p.y), r: 5, fill: c, stroke: css("--surface"), "stroke-width": 2 }, s);
+    const hit = el("circle", { cx: X(p.x), cy: Y(p.y), r: 11, class: "hit" }, s);
+    hit.addEventListener("mousemove", (ev) => showTip(techTip(p.k, p.mk), ev));
+    hit.addEventListener("mouseleave", hideTip);
+  }
+  for (const p of pts) {
+    if (LABEL[`${p.k}:${p.mk}`]) {
+      const label = `${DATA.techs[p.k].name.replace(/ \(.*\)$/, "")} · ${MK[p.mk]}`;
+      const w = label.length * 11 + 8;
+      const right = X(p.x) < W - 200;
+      const x = X(p.x) + (right ? 9 : -9);
+      const y = [Y(p.y) + 4, Y(p.y) - 10, Y(p.y) + 18].find((yy) => free(x, yy, w, right));
+      if (y == null) continue;
+      placed.push({ y, a: right ? x : x - w, b: right ? x + w : x });
+      const t = el("text", { x, y, "text-anchor": right ? "start" : "end" }, s);
+      t.style.fill = css("--ink-2");
+      t.style.fontFamily = "var(--font-body)";
+      t.textContent = label;
+    }
+  }
+}
+
+/* ---------- 차트 C: 수익 곡선 ---------- */
+let eqMarket = "kr", eqTech = "entry";
+function drawEquity() {
+  const host = document.getElementById("eqchart");
+  host.innerHTML = "";
+  const E = DATA.equity[eqMarket], S = E.s[eqTech], M = E.market, D = E.dates;
+  const W = 720, Hh = 320, m = { l: 48, r: 16, t: 12, b: 28 };
+  const all = S.concat(M);
+  const y0 = Math.max(0, Math.floor(Math.min(...all) * 2) / 2), y1 = Math.ceil(Math.max(...all) * 2) / 2;
+  const X = (i) => m.l + (i / (D.length - 1)) * (W - m.l - m.r);
+  const Y = (v) => m.t + (1 - (v - y0) / (y1 - y0)) * (Hh - m.t - m.b);
+  const s = el("svg", { viewBox: `0 0 ${W} ${Hh}`, role: "img", "aria-label": "누적 수익 곡선" }, host);
+  const step = (y1 - y0) > 4 ? 1 : 0.5;
+  for (let v = Math.ceil(y0 / step) * step; v <= y1 + 1e-9; v += step) {
+    el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: v === 1 ? css("--ink-3") : css("--grid"), "stroke-width": 1 }, s);
+    const t = el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end" }, s); t.textContent = `${v.toFixed(1)}`;
+  }
+  let lastYear = "";
+  D.forEach((d, i) => {
+    const yr = d.slice(0, 4);
+    if (yr !== lastYear && d.slice(5, 7) <= "01") {
+      const t = el("text", { x: X(i), y: Hh - 8, "text-anchor": "middle" }, s); t.textContent = yr;
+    }
+    lastYear = yr;
+  });
+  const path = (arr) => arr.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join("");
+  el("path", { d: path(M), fill: "none", stroke: css("--ink-3"), "stroke-width": 2, "stroke-linejoin": "round" }, s);
+  const sc = css(eqMarket === "kr" ? "--kr" : "--nq");
+  el("path", { d: path(S), fill: "none", stroke: sc, "stroke-width": 2, "stroke-linejoin": "round" }, s);
+  // 끝점 강조
+  el("circle", { cx: X(S.length - 1), cy: Y(S.at(-1)), r: 4, fill: sc, stroke: css("--surface"), "stroke-width": 2 }, s);
+  // 크로스헤어
+  const cross = el("line", { y1: m.t, y2: Hh - m.b, stroke: css("--ink-3"), "stroke-dasharray": "3 3", visibility: "hidden" }, s);
+  const overlay = el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: Hh - m.t - m.b, fill: "transparent" }, s);
+  overlay.addEventListener("mousemove", (ev) => {
+    const b = s.getBoundingClientRect();
+    const fx = ((ev.clientX - b.left) / b.width) * W;
+    const i = Math.max(0, Math.min(D.length - 1, Math.round(((fx - m.l) / (W - m.l - m.r)) * (D.length - 1))));
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("visibility", "visible");
+    showTip(`<b>${D[i]}</b>` + row(DATA.techs[eqTech].name.replace(/ \(.*\)$/, ""), S[i].toFixed(2)) + row("시장", M[i].toFixed(2)), ev);
+  });
+  overlay.addEventListener("mouseleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(); });
+
+  document.getElementById("eq-key").style.background = `var(${eqMarket === "kr" ? "--kr" : "--nq"})`;
+  document.getElementById("eq-key-label").textContent = DATA.techs[eqTech].name;
+  const r = DATA.techs[eqTech][eqMarket];
+  document.getElementById("eq-stats").innerHTML =
+    `<span>연수익률 <b>${pct(r.cagr)}</b> (시장 ${pct(r.mkt)})</span><span>연 알파 <b>${pct(r.alpha)}</b> · t <b>${r.t.toFixed(1)}</b></span>` +
+    `<span>최대 낙폭 <b>${pct(r.mdd, 0)}</b></span><span>판정 <b>${esc(r.verdict)}</b></span>`;
+}
+const sel = document.getElementById("eq-tech");
+sel.innerHTML = KEYS.map((k) => `<option value="${k}"${k === eqTech ? " selected" : ""}>${esc(DATA.techs[k].name)}</option>`).join("");
+sel.addEventListener("change", () => { eqTech = sel.value; drawEquity(); });
+function bindSeg(id, fn) {
+  document.querySelectorAll(`#${id} button`).forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll(`#${id} button`).forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    fn(b.dataset.m);
+  }));
+}
+bindSeg("eq-market", (mk) => { eqMarket = mk; drawEquity(); });
+
+/* ---------- 표 ---------- */
+let tbMarket = "kr", sortKey = "alpha", sortDir = -1;
+const COLS = [
+  ["name", "기법"], ["alpha", "연 알파"], ["t", "t값"], ["tr", "학습 알파"], ["te", "검증 알파"],
+  ["cagr", "연수익률"], ["mdd", "최대 낙폭"], ["win", "20일 승률"], ["n", "신호 수"], ["verdict", "판정"],
+];
+function drawTable() {
+  const thead = document.querySelector("#tbl thead"), tbody = document.querySelector("#tbl tbody");
+  thead.innerHTML = "<tr>" + COLS.map(([k, l]) => `<th tabindex="0" data-k="${k}"${k === sortKey ? ` aria-sort="${sortDir < 0 ? "descending" : "ascending"}"` : ""}>${l}</th>`).join("") + "</tr>";
+  const rows = KEYS.map((k) => ({ k, name: DATA.techs[k].name, desc: DATA.techs[k].desc, ...DATA.techs[k][tbMarket] }));
+  rows.sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    return typeof x === "string" ? sortDir * x.localeCompare(y, "ko") : sortDir * ((x ?? -1e9) - (y ?? -1e9));
+  });
+  const sg = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
+  tbody.innerHTML = rows.map((r) => `<tr class="${MINE.has(r.k) ? "mine" : ""}">
+    <td>${esc(r.name)}<span class="desc">${esc(r.desc)}</span></td>
+    <td class="n ${sg(r.alpha)}">${pct(r.alpha)}</td><td class="n">${r.t.toFixed(1)}</td>
+    <td class="n ${sg(r.tr)}">${pct(r.tr)}</td><td class="n ${sg(r.te)}">${pct(r.te)}</td>
+    <td class="n">${pct(r.cagr)}</td><td class="n">${pct(r.mdd, 0)}</td><td class="n">${pctU(r.win)}</td>
+    <td class="n">${r.n.toLocaleString()}</td>
+    <td><span class="chip ${r.verdict.includes("(+)") ? "pos" : r.verdict.includes("(−)") ? "neg" : ""}">${esc(r.verdict)}</span></td></tr>`).join("");
+  thead.querySelectorAll("th").forEach((th) => {
+    const go = () => { const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : (k === "name" || k === "verdict" ? 1 : -1); sortKey = k; drawTable(); };
+    th.addEventListener("click", go);
+    th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  });
+}
+bindSeg("tb-market", (mk) => { tbMarket = mk; drawTable(); });
+
+function drawAll() { drawDots(); drawScatter(); drawEquity(); drawTable(); }
+drawAll();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>
