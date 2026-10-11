@@ -171,6 +171,7 @@ window.addEventListener("resize", () => charts.forEach((c) => c.chart.applyOptio
 function renderResult(data) {
   window.__lastData = data;
   PD = pdOf(data.info.currency);
+  EVIDENCE = EVIDENCE_BY[marketOf(data.info.symbol)] || null;
   const { info, summary, score } = data;
   $("#result").hidden = false;
   $("#stock-name").innerHTML = `${esc(info.name)}<small>${esc(info.symbol)} · ${esc(info.exchange)} · ${esc(summary.last_date)} 기준</small>`;
@@ -180,8 +181,10 @@ function renderResult(data) {
   $("#grade").className = `grade ${gradeClass(score)}`;
   $("#gauge-fill").style.width = `${score}%`;
   $("#gauge-fill").style.background = gradeColor(score);
+  const entryV = EVIDENCE ? verdictOf("entry") : null;
   $("#score-note").textContent = EVIDENCE
-    ? `최근 세력 진입봉 중심 점수(${EVIDENCE.adopted?.version || ""})입니다. ${EVIDENCE.universe}종목·5년 검증에서 수익 예측력은 확인되지 않았으며, 진입봉은 이후 급등·급락이 모두 잦아지는 '변동성 확대' 신호에 가깝습니다 (백테스트 탭 참고).`
+    ? `최근 세력 진입봉 중심 점수(${EVIDENCE.adopted?.version || ""})입니다. ${EVIDENCE.market === "nasdaq" ? "나스닥 " : ""}${EVIDENCE.universe}종목·5년 검증에서 수익 예측력은 확인되지 않았습니다. ` +
+      (entryV?.kind === "vol" ? "진입봉은 이후 급등·급락이 모두 잦아지는 '변동성 확대' 신호에 가깝습니다." : "진입봉도 변동성이 비슷한 종목과 비교하면 뚜렷한 효과가 없었습니다.") + " (백테스트 탭 참고)"
     : "";
 
   const kpi = (k, v, sub = "", cls = "") => `<div class="kpi"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="s">${sub}</div></div>`;
@@ -330,18 +333,24 @@ $("#scan-btn").addEventListener("click", async () => {
 });
 
 /* ---------- 대규모 검증 근거 ---------- */
-let EVIDENCE = null;
+let EVIDENCE = null;            // 현재 보고 있는 종목 시장의 검증 결과
+const EVIDENCE_BY = {};          // kr / nasdaq
+let evidenceView = "kr";         // 백테스트 탭 표에서 고른 시장
+const marketOf = (symbol) => (/\.(KS|KQ)$/i.test(symbol || "") || /^\d{6}$/.test(symbol || "") ? "kr" : "nasdaq");
 
-function verdictOf(type) {
-  const tr = EVIDENCE?.train.by_type[type], te = EVIDENCE?.test.by_type[type];
+function verdictOf(type, ev = EVIDENCE) {
+  const tr = ev?.train.by_type[type], te = ev?.test.by_type[type];
   if (!tr || !te) return null;
   // 같은 변동성의 아무 종목 대비: 평균 차이 방향이 두 구간에서 같고 원 t값이 둘 다 |t|≥2일 때만 방향성 인정
   const ex = (x) => x.mean_excess - x.vm_mean;
-  const directional = Math.sign(ex(tr)) === Math.sign(ex(te)) && Math.abs(tr.t) >= 2 && Math.abs(te.t) >= 2;
+  // t값도 '같은 변동성 기대값 대비'로 계산한 vm_t 사용 (없으면 원 t값)
+  const tv = (x) => (x.vm_t ?? x.t);
+  const directional = Math.sign(ex(tr)) === Math.sign(ex(te)) && Math.abs(tv(tr)) >= 2 && Math.abs(tv(te)) >= 2;
   const volUp = [tr, te].every((x) => x.p_big > x.vm_p_big * 1.15 && x.p_crash > x.vm_p_crash * 1.15);
   let kind = "none", label = "효과 불분명";
   if (directional && ex(te) > 0) [kind, label] = volUp ? ["vol", "변동성 확대 · 평균↑"] : ["pos", "평균 우위 ▲"];
   else if (directional) [kind, label] = ["neg", "평균 약세 ▼"];
+  else if (volUp) [kind, label] = ["vol", "변동성 확대 (방향 불분명)"];
   return { kind, label, tr, te };
 }
 
@@ -354,30 +363,41 @@ function verdictHtml(type) {
 }
 
 function renderEvidence() {
+  const EVIDENCE = EVIDENCE_BY[evidenceView];
   if (!EVIDENCE) return;
+  document.querySelectorAll("#evidence-market button").forEach((b) => b.classList.toggle("active", b.dataset.m === evidenceView));
   $("#evidence-card").hidden = false;
   $("#evidence-meta").textContent = `${EVIDENCE.universe}종목 · 학습 ${EVIDENCE.train.period.join("~")} · 검증 ${EVIDENCE.test.period.join("~")} · ${EVIDENCE.horizon}거래일 보유`;
   const cell = (x) => `<td class="num"><b class="${x.mean_excess - x.vm_mean >= 0 ? "up" : "down"}">${pct(x.mean_excess - x.vm_mean, 2)}</b>
-    <span class="sub">중앙값 ${pct(x.median_excess)} · t=${x.t.toFixed(1)} · n=${x.n.toLocaleString()}</span>
+    <span class="sub">중앙값 ${pct(x.median_excess)} · t=${(x.vm_t ?? x.t).toFixed(1)} · n=${x.n.toLocaleString()}</span>
     <span class="sub">급등 ${ratio(x.p_big, x.vm_p_big)} · 급락 ${ratio(x.p_crash, x.vm_p_crash)}</span></td>`;
   const types = Object.keys(EVIDENCE.test.by_type);
   $("#evidence-table").innerHTML = `<thead><tr><th>신호</th><th class="num">학습 구간</th><th class="num">검증 구간</th><th>판정</th></tr></thead><tbody>` +
     types.map((t) => {
-      const v = verdictOf(t);
+      const v = verdictOf(t, EVIDENCE);
       return `<tr><td><span class="badge b-${t}">${esc(SIGNAL_NAMES[t] || t)}</span></td>${cell(v.tr)}${cell(v.te)}<td><span class="verdict v-${v.kind}">${v.label}</span></td></tr>`;
     }).join("") + "</tbody>";
   const sc = EVIDENCE.score, ad = EVIDENCE.adopted;
+  const mname = { kr: "한국", nasdaq: "나스닥" }[evidenceView];
   const line = (name, x) => x ? `${name}: IC 학습 ${x.ic_train.toFixed(3)} / 검증 ${x.ic_test.toFixed(3)}, 점수 상위 20% 초과수익 학습 ${pct(x.top20_train)} / 검증 ${pct(x.top20_test)}` : "";
   $("#evidence-score").innerHTML = [
     line(`현재 배점(${ad?.version || "-"}, ${ad?.adopted || ""} 적용)`, sc.adopted_c),
     line("최초 배점", sc.legacy_c),
-    "두 배점 모두 0과 구별되는 예측력은 확인되지 않았습니다. 현재 배점의 실제 검증은 적용일 이후 데이터로 진행합니다.",
+    `${mname}: 두 배점 모두 0과 구별되는 예측력은 확인되지 않았습니다.` + (evidenceView === "nasdaq" ? " 나스닥은 배점을 정할 때 쓰지 않은 독립 시장입니다(수급 데이터 없음)." : " 현재 배점의 실제 검증은 적용일 이후 데이터로 진행합니다."),
   ].filter(Boolean).join("<br>");
 }
 
-fetch("/api/evidence").then((r) => r.json()).then((e) => {
-  if (e && e.train) { EVIDENCE = e; renderEvidence(); if (window.__lastData) renderResult(window.__lastData); }
-}).catch(() => {});
+Promise.all(["kr", "nasdaq"].map((m) => fetch(`/api/evidence?market=${m}`).then((r) => r.json()).catch(() => null)))
+  .then(([kr, nq]) => {
+    if (kr?.train) EVIDENCE_BY.kr = kr;
+    if (nq?.train) EVIDENCE_BY.nasdaq = nq;
+    renderEvidence();
+    if (window.__lastData) renderResult(window.__lastData);
+  });
+document.querySelectorAll("#evidence-market button").forEach((b) => b.addEventListener("click", () => {
+  evidenceView = b.dataset.m;
+  renderEvidence();
+}));
 
 /* ---------- backtest ---------- */
 let btChart = null;

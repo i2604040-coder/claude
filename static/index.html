@@ -133,8 +133,14 @@
       </div>
 
       <div class="card" id="evidence-card" hidden>
-        <h3>대규모 검증 결과 <span class="hint" id="evidence-meta"></span></h3>
-        <p class="hint">신호가 나온 날 종가에 사서 20거래일 보유했을 때의 시장(유니버스 평균) 대비 초과수익입니다. 큰 숫자는 <b>변동성이 같은 아무 종목·아무 날</b>보다 얼마나 나았는지이고, '평소'도 같은 변동성 기준입니다. 급등·급락은 시장 대비 ±20% 초과입니다. 학습·검증 두 구간에서 같은 방향으로 유의(|t|≥2)할 때만 방향성을 인정합니다.</p>
+        <div class="chart-head">
+          <h3>대규모 검증 결과 <span class="hint" id="evidence-meta"></span></h3>
+          <div class="seg" id="evidence-market">
+            <button type="button" data-m="kr" class="active">한국 (코스피·코스닥)</button>
+            <button type="button" data-m="nasdaq">나스닥</button>
+          </div>
+        </div>
+        <p class="hint">신호가 나온 날 종가에 사서 20거래일 보유했을 때의 시장(유니버스 평균) 대비 초과수익입니다. 큰 숫자는 <b>변동성이 같은 아무 종목·아무 날</b>보다 얼마나 나았는지이고, '평소'도 같은 변동성 기준입니다. 급등·급락은 시장 대비 ±20% 초과입니다. t값도 같은 변동성 기대값 대비로 계산하며, 학습·검증 두 구간에서 같은 방향으로 유의(|t|≥2)할 때만 방향성을 인정합니다.</p>
         <div class="table-wrap"><table id="evidence-table"></table></div>
         <p class="hint" id="evidence-score"></p>
       </div>

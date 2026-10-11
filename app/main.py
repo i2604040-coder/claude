@@ -19,13 +19,15 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 EVIDENCE_FILE = Path(__file__).resolve().parent / "signal_evidence.json"
 
 
-@lru_cache(maxsize=1)
-def load_evidence() -> dict | None:
+@lru_cache(maxsize=4)
+def load_evidence(market: str = "kr") -> dict | None:
     """research/calibrate.py가 만든 신호 유형별 대규모 백테스트 결과 (없으면 None)."""
+    path = EVIDENCE_FILE if market == "kr" else EVIDENCE_FILE.with_name(f"signal_evidence_{market}.json")
     try:
-        return json.loads(EVIDENCE_FILE.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+
 
 app = FastAPI(title="세력 매집 탐지기", version="1.0.0")
 
@@ -56,8 +58,8 @@ def api_analyze(
 
 
 @app.get("/api/evidence")
-def api_evidence():
-    return load_evidence() or {}
+def api_evidence(market: str = Query("kr", pattern="^(kr|nasdaq)$")):
+    return load_evidence(market) or {}
 
 
 @app.post("/api/upload")

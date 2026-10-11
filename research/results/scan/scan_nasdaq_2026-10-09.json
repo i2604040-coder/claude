@@ -1,0 +1,164 @@
+{
+ "market": "nasdaq",
+ "date": "2026-10-09",
+ "n": 490,
+ "entries": [
+  {
+   "code": "XP",
+   "name": "XP Inc. Class A Common Stock",
+   "close": 32.220001220703125,
+   "score": 47.9,
+   "chg_20d": 0.6223565070742847,
+   "vol_ann": 1.121788674184365,
+   "entry_date": "2026-10-05",
+   "entry_detail": "거래량 5.8배, 양봉 몸통 8.4%"
+  },
+  {
+   "code": "TLN",
+   "name": "Talen Energy Corporation Common Stock",
+   "close": 378.57000732421875,
+   "score": 44.3,
+   "chg_20d": 0.21049440156504806,
+   "vol_ann": 0.6554951970190834,
+   "entry_date": "2026-10-06",
+   "entry_detail": "거래량 3.1배, 양봉 몸통 6.9%"
+  }
+ ],
+ "top": [
+  {
+   "code": "XP",
+   "name": "XP Inc. Class A Common Stock",
+   "close": 32.220001220703125,
+   "score": 47.9,
+   "chg_20d": 0.6223565070742847,
+   "vol_ann": 1.121788674184365,
+   "fresh_signals": "세력 진입봉(10-05)"
+  },
+  {
+   "code": "TLN",
+   "name": "Talen Energy Corporation Common Stock",
+   "close": 378.57000732421875,
+   "score": 44.3,
+   "chg_20d": 0.21049440156504806,
+   "vol_ann": 0.6554951970190834,
+   "fresh_signals": "세력 진입봉(10-06)"
+  },
+  {
+   "code": "UTHR",
+   "name": "United Therapeutics Corporation Common Stock",
+   "close": 549.1599731445312,
+   "score": 32.5,
+   "chg_20d": 0.10470517456244277,
+   "vol_ann": 0.5737964927388434,
+   "fresh_signals": ""
+  },
+  {
+   "code": "AAPL",
+   "name": "Apple Inc. Common Stock",
+   "close": 336.6400146484375,
+   "score": 32.4,
+   "chg_20d": 0.013152032320878027,
+   "vol_ann": 0.16362750278635654,
+   "fresh_signals": ""
+  },
+  {
+   "code": "GILD",
+   "name": "Gilead Sciences Inc. Common Stock",
+   "close": 151.1699981689453,
+   "score": 30.4,
+   "chg_20d": 0.05183688341890291,
+   "vol_ann": 0.20485560008633233,
+   "fresh_signals": ""
+  },
+  {
+   "code": "FRHC",
+   "name": "Freedom Holding Corp. Common Stock",
+   "close": 169.64999389648438,
+   "score": 29.7,
+   "chg_20d": 0.025075491821657803,
+   "vol_ann": 0.37009676558413124,
+   "fresh_signals": ""
+  },
+  {
+   "code": "CHKP",
+   "name": "Check Point Software Technologies Ltd. Ordinary Shares",
+   "close": 137.17999267578125,
+   "score": 29.3,
+   "chg_20d": 0.042084421998018096,
+   "vol_ann": 0.3729722761844619,
+   "fresh_signals": ""
+  },
+  {
+   "code": "EXEL",
+   "name": "Exelixis Inc. Common Stock",
+   "close": 59.86000061035156,
+   "score": 28.9,
+   "chg_20d": 0.06664293923109654,
+   "vol_ann": 0.20571576054726443,
+   "fresh_signals": ""
+  },
+  {
+   "code": "MANH",
+   "name": "Manhattan Associates Inc. Common Stock",
+   "close": 204.88999938964844,
+   "score": 28.9,
+   "chg_20d": 0.015211534803374782,
+   "vol_ann": 0.26888694311210487,
+   "fresh_signals": ""
+  },
+  {
+   "code": "ADP",
+   "name": "Automatic Data Processing Inc. Common Stock",
+   "close": 270.8800048828125,
+   "score": 28.8,
+   "chg_20d": 0.009766625742974266,
+   "vol_ann": 0.22620288104768402,
+   "fresh_signals": ""
+  },
+  {
+   "code": "KNSA",
+   "name": "Kiniksa Pharmaceuticals International plc Class A Ordinary Shares",
+   "close": 79.77999877929688,
+   "score": 28.8,
+   "chg_20d": 0.04602074591214178,
+   "vol_ann": 0.24335173960957768,
+   "fresh_signals": ""
+  },
+  {
+   "code": "CBC",
+   "name": "Central Bancompany Inc. Class A Common Stock",
+   "close": 32.41999816894531,
+   "score": 28.7,
+   "chg_20d": 0.00030849495773765945,
+   "vol_ann": 0.17110521987394994,
+   "fresh_signals": ""
+  },
+  {
+   "code": "MORN",
+   "name": "Morningstar Inc. Common Stock",
+   "close": 204.4499969482422,
+   "score": 28.6,
+   "chg_20d": 0.07030673424457379,
+   "vol_ann": 0.38637526776381426,
+   "fresh_signals": "OBV 상승 다이버전스(10-09)"
+  },
+  {
+   "code": "AMGN",
+   "name": "Amgen Inc. Common Stock",
+   "close": 414.8699951171875,
+   "score": 28.4,
+   "chg_20d": 0.09943020645766021,
+   "vol_ann": 0.2757870578912087,
+   "fresh_signals": ""
+  },
+  {
+   "code": "DSGX",
+   "name": "Descartes Systems Group Inc. (The) Common Stock",
+   "close": 82.81999969482422,
+   "score": 28.0,
+   "chg_20d": 0.08916358097928967,
+   "vol_ann": 0.30462008423416004,
+   "fresh_signals": ""
+  }
+ ]
+}

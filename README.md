@@ -69,19 +69,24 @@ uvicorn app.main:app --reload --port 8000
 python -m research.collect      # 시세·수급 수집 (research/.cache, 약 13분, --refresh로 최신화)
 python -m research.calibrate    # 학습(~2024-09)/검증(2024-10~) 분리 평가, app/signal_evidence.json 갱신
 python -m research.calibrate --write   # 검증 통과 시에만 app/weights.json 갱신
+python -m research.collect --market nasdaq && python -m research.calibrate --market nasdaq   # 나스닥 독립 검증
+python -m research.scan_now --market kr --only KOSDAQ   # 유니버스 전체 현재 스캔 (--market nasdaq도 가능)
+python -m research.scan_now --market kr --only KOSDAQ   # 유니버스 전체 현재 스캔 (nasdaq도 가능)
 ```
 
 결과 요약은 [research/REPORT.md](research/REPORT.md)에 있습니다. 핵심:
 - 최초 배점의 종합 점수는 20일 수익 예측력이 확인되지 않았고, IC 비례로 다시 계산한 배점도 검증 구간을 통과하지 못했습니다.
 - **세력 진입봉**은 평균 초과수익이 두 구간 모두 양(+)이었지만, 중앙값과 승률은 평소와 같습니다. 이후 급등·급락이 모두 잦아지는 **변동성 확대 신호**입니다. **기관·외국인 매집**(주가 정체 중 순매수)은 두 구간 모두 평균 약세였습니다.
 - 2026-10-10부터 **진입봉 중심 v2 배점**(`app/weights.json`)을 적용했습니다. 최근 진입봉 60, 박스권·세력평단·CMF·수급 각 10, 기관·외국인 매집 −20(감점)입니다. 이 배점은 검증 결과를 본 뒤 정한 것이라 적용일 이후 데이터로 전진 검증합니다 (`python -m research.calibrate --resample --since 2026-10-10`). 되돌리려면 `app/weights.json`을 지우면 최초 배점으로 돌아갑니다.
+- **나스닥 489종목 독립 검증**(배점을 정할 때 쓰지 않은 시장)에서는 어떤 신호도 변동성을 맞춘 뒤 두 구간 일관된 방향성이 없었고, 종합 점수는 높을수록 이후 수익이 낮았습니다. 판정용 t값을 '같은 변동성 기대값 대비'로 바꾸면서 한국 진입봉도 '변동성 확대(방향 불분명)'로 정정했습니다.
+- 화면의 신호 내역과 백테스트 탭에 시장별(한국/나스닥) 검증 결과가 표시됩니다.
 
 ## API
 
 - `GET /api/analyze?ticker=005930&range=1y&lookback=60&spike=2.5`
 - `POST /api/upload` (multipart `file`)
 - `POST /api/scan` `{"tickers": ["005930", "000660"], "range": "1y"}`
-- `GET /api/evidence` (대규모 검증 결과)
+- `GET /api/evidence?market=kr|nasdaq` (시장별 대규모 검증 결과)
 - `POST /api/backtest` `{"tickers": ["005930", "000660"], "range": "2y", "flow": true}`
 - 모든 분석 API는 `flow`(기본 true)로 국내 수급 반영 여부를 지정합니다
 

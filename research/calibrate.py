@@ -26,7 +26,7 @@ from app.analysis import LEGACY_WEIGHTS, WEIGHTS_FILE, Params, analyze
 EVIDENCE_FILE = WEIGHTS_FILE.parent / "signal_evidence.json"
 from app.backtest import signal_events
 
-from .collect import CACHE
+from .collect import CACHE, universe_file
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "results"
@@ -74,6 +74,9 @@ def ic_table(s: pd.DataFrame, cols: list[str], target: str = "x20", min_n: int =
     """날짜별 횡단면 Spearman IC → 평균, t값(겹침 보정), 양(+)인 날짜 비율."""
     out = {}
     for c in cols:
+        if c not in s:
+            out[c] = {"ic": np.nan, "t": np.nan, "pos": np.nan, "dates": 0}
+            continue
         ics = []
         for _, g in s[[c, target]].dropna().groupby(s["date"]):
             if len(g) >= min_n and g[c].nunique() > 1:
@@ -122,6 +125,7 @@ def event_table(ev: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--market", choices=["kr", "nasdaq"], default="kr")
     ap.add_argument("--years", default="5y")
     ap.add_argument("--flow-days", type=int, default=800)
     ap.add_argument("--split", default="2024-10-01")
@@ -129,14 +133,16 @@ def main() -> None:
     ap.add_argument("--resample", action="store_true", help="캐시된 표본(results/samples.pkl)을 버리고 다시 계산")
     ap.add_argument("--since", default=None, help="이 날짜 이후 표본만으로 현재 배점(app/weights.json)을 평가 (전진 검증)")
     args = ap.parse_args()
-    OUT.mkdir(exist_ok=True)
+    out = OUT if args.market == "kr" else OUT / args.market
+    out.mkdir(parents=True, exist_ok=True)
+    evidence_file = EVIDENCE_FILE if args.market == "kr" else EVIDENCE_FILE.with_name(f"signal_evidence_{args.market}.json")
     split = pd.Timestamp(args.split)
 
-    uni = pickle.loads((CACHE / "universe.pkl").read_bytes())
-    ref, _ = load("005930", args.years, args.flow_days)
+    uni = pickle.loads((CACHE / universe_file(args.market)).read_bytes())
+    ref, _ = load("005930" if args.market == "kr" else uni[0]["code"], args.years, args.flow_days)
     grid = list(ref.index[WARMUP::STEP])
 
-    samples_path = OUT / "samples.pkl"
+    samples_path = out / "samples.pkl"
     if samples_path.exists() and not args.resample:
         s, ev = pickle.loads(samples_path.read_bytes())
     else:
@@ -182,8 +188,10 @@ def main() -> None:
     vm: dict = {}
     for (per, typ), g in ev.dropna(subset=["x20", "vol"]).groupby(["per", "type"]):
         b = vb_base.loc[per].reindex(g["vb"])
+        adj = g["x20"].to_numpy() - b["mean"].to_numpy()   # 같은 변동성 기대값 대비 초과
+        vm_t = adj.mean() / (adj.std(ddof=1) / np.sqrt(len(adj))) if len(adj) > 2 else np.nan
         vm.setdefault(per, {})[typ] = {"vm_mean": float(b["mean"].mean()), "vm_p_big": float(b["up"].mean()),
-                                       "vm_p_crash": float(b["down"].mean())}
+                                       "vm_p_crash": float(b["down"].mean()), "vm_t": float(vm_t)}
 
     train, test = s[s["date"] < split], s[s["date"] >= split]
     ic_tr, ic_te = ic_table(train, CANDIDATES + ["legacy"]), ic_table(test, CANDIDATES + ["legacy"])
@@ -241,14 +249,15 @@ def main() -> None:
         "adopted_weights": adopted_w, "adopted_meta": {k: v for k, v in (adopted or {}).items() if k != "weights"},
         "ic_extra": {per: ic_extra[per].to_dict("index") for per in ("train", "test")}, "forward": forward,
     }
-    (OUT / "calibration.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, default=float), encoding="utf-8")
+    (out / "calibration.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, default=float), encoding="utf-8")
 
     # 신호 유형별 과거 성과 → 화면에 근거로 표시 (가중치 채택 여부와 무관하게 항상 갱신)
     def ev_dict(t, per):
         return {k: {"n": int(v["n"]), "mean_excess": float(v["mean_excess"]), "median_excess": float(v["median_excess"]), "t": float(v["t"]),
                     "win_vs_mkt": float(v["win_vs_mkt"]), "p_big": float(v["p_big"]), "p_crash": float(v["p_crash"]),
                     **vm.get(per, {}).get(k, {})} for k, v in t.to_dict("index").items()}
-    EVIDENCE_FILE.write_text(json.dumps({
+    evidence_file.write_text(json.dumps({
+        "market": args.market,
         "horizon": H, "universe": result["tickers_sampled"], "generated": result["generated"],
         "train": {"period": result["period"]["train"], "by_type": ev_dict(ev_tr, "train"), "baseline": baseline["train"]},
         "test": {"period": result["period"]["test"], "by_type": ev_dict(ev_te, "test"), "baseline": baseline["test"]},
@@ -278,7 +287,7 @@ def main() -> None:
     if forward:
         print("\n[전진 검증]", json.dumps(forward, ensure_ascii=False, default=float, indent=1))
 
-    if args.write and passed:
+    if args.write and passed and args.market == "kr":
         WEIGHTS_FILE.write_text(json.dumps({
             "weights": new_w,
             "source": "research/calibrate.py — 학습 구간 IC 비례 배점, 검증 구간에서 기존 배점 대비 우위 확인",

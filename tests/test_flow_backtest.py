@@ -129,3 +129,11 @@ def test_api_backtest_demo():
     assert body["by_signal"] and body["score_history"] and body["baseline"]["r20"]["n"] > 0
     r = client.post("/api/backtest", json={"tickers": ["demo", "demo"], "range": "1y"})
     assert r.status_code == 200 and len(r.json()["tickers"]) == 1
+
+
+def test_api_evidence_per_market():
+    client = TestClient(app)
+    for m in ("kr", "nasdaq"):
+        r = client.get("/api/evidence", params={"market": m})
+        assert r.status_code == 200
+    assert client.get("/api/evidence", params={"market": "xx"}).status_code == 422
