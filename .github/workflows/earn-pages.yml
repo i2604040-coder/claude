@@ -33,6 +33,7 @@ jobs:
           mkdir _site
           cp earn/index.html earn/style.css earn/app.js earn/calc.js earn/config.js earn/robots.txt _site/
           [ -f earn/toss-qr.png ] && cp earn/toss-qr.png _site/ || true
+          [ -f earn/CNAME ] && cp earn/CNAME _site/ || true
           [ -f earn/ads.txt ] && cp earn/ads.txt _site/ || true
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

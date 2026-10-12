@@ -194,7 +194,10 @@
       const qr = document.createElement('div');
       qr.className = 'qr';
       qr.hidden = true;
-      qr.appendChild(img);
+      const frame = document.createElement('div');
+      frame.className = 'frame';
+      frame.appendChild(img);
+      qr.appendChild(frame);
       qr.insertAdjacentHTML('beforeend', '<p>토스 앱 → 홈 상단 스캔 버튼으로 QR을 찍어주세요.<br>휴대폰이라면 길게 눌러 이미지를 저장한 뒤 토스에서 불러오세요.</p>');
       supportBox.appendChild(qr);
       btn.addEventListener('click', (e) => { e.preventDefault(); qr.hidden = !qr.hidden; });
