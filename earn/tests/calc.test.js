@@ -134,3 +134,53 @@ test('세금 자동 판정', () => {
   assert.strictEqual(C.guessTax('252670.KS', 'KODEX 200선물인버스2X'), 'dividend');
   assert.strictEqual(C.guessTax('TSLA', '테슬라'), 'overseas');
 });
+
+const P = { dates: ['2020-01', '2020-02', '2020-03', '2020-04', '2020-05'], close: [100, 50, 100, 200, 100], tax: 'free' };
+
+test('rangeIndex·sliceProduct: 기간 자르기', () => {
+  assert.deepStrictEqual(C.rangeIndex(P.dates, '2020-02', '2020-04'), [1, 3]);
+  assert.deepStrictEqual(C.rangeIndex(P.dates, '', ''), [0, 4]);
+  assert.deepStrictEqual(C.rangeIndex(P.dates, '2021-01', ''), [-1, -1]);
+  assert.deepStrictEqual(C.sliceProduct(P, '2020-03', '').close, [100, 200, 100]);
+});
+
+test('commonRange: 늦게 상장한 종목에 맞춤', () => {
+  const late = { dates: ['2020-03', '2020-04', '2020-05', '2020-06'], close: [1, 1, 1, 1] };
+  assert.deepStrictEqual(C.commonRange([P, late], '2019-01', ''), { from: '2020-03', to: '2020-05', ok: true });
+  assert.strictEqual(C.commonRange([P, late], '', '2020-02').ok, false);
+});
+
+test('battle 거치식: 수익률·MDD·연평균·시리즈', () => {
+  const r = C.battle(P, 'deposit', 1000, '2020-01', '2020-04');
+  assert.strictEqual(r.months, 3);
+  near(r.afterTax, 2000, 1e-9);
+  near(r.profitRate, 1, 1e-9);
+  near(r.mdd, -0.5, 1e-9);
+  near(r.cagr, Math.pow(2, 4) - 1, 1e-9);
+  assert.deepStrictEqual(r.series.map((x) => x.value), [1000, 500, 1000, 2000]);
+  assert.strictEqual(r.worstMonth.date, '2020-02');
+});
+
+test('battle 적립식: 마지막 달은 평가만, 원금 라인', () => {
+  const r = C.battle(P, 'saving', 100, '2020-01', '2020-03');
+  // 100원에 1, 50원에 2 = 3단위 × 100
+  near(r.value, 300, 1e-9);
+  assert.strictEqual(r.principal, 200);
+  assert.deepStrictEqual(r.series.map((x) => x.principal), [100, 200, 200]);
+  assert.strictEqual(C.battle(P, 'saving', 100, '2020-05', '').enough, false);
+});
+
+test('battle 세전/세후', () => {
+  const taxed = { ...P, tax: 'dividend' };
+  near(C.battle(taxed, 'deposit', 1000, '2020-01', '2020-04').afterTax, 2000 - 154, 1e-9);
+  near(C.battle(taxed, 'deposit', 1000, '2020-01', '2020-04', false).afterTax, 2000, 1e-9);
+});
+
+test('alignProducts: 한쪽에 빠진 달은 양쪽에서 제외', () => {
+  const a = { dates: ['2020-01', '2020-02', '2020-03'], close: [1, 2, 3] };
+  const b = { dates: ['2020-01', '2020-03', '2020-04'], close: [10, 30, 40] };
+  const [x, y] = C.alignProducts([a, b], '', '');
+  assert.deepStrictEqual(x.dates, ['2020-01', '2020-03']);
+  assert.deepStrictEqual(x.close, [1, 3]);
+  assert.deepStrictEqual(y.close, [10, 30]);
+});

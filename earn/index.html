@@ -25,6 +25,7 @@
     <button role="tab" data-tab="savings">예·적금 이자</button>
     <button role="tab" data-tab="severance">퇴직금</button>
     <button role="tab" data-tab="compare">📈 투자 비교</button>
+    <button role="tab" data-tab="battle">⚔️ 종목 대결</button>
   </nav>
 
   <main>
@@ -151,7 +152,7 @@
             <button type="button" data-symbol="QQQ">QQQ</button>
             <button type="button" data-symbol="086520.KQ">에코프로</button>
           </div>
-          <div class="picked" hidden><span></span><button type="button" class="ghost" aria-label="선택 취소">✕</button></div>
+          <div class="picked-list"></div>
           <label class="pick-tax" hidden>이 종목 세금
             <select name="picktax">
               <option value="auto">자동 판정</option>
@@ -161,7 +162,69 @@
             </select>
           </label>
         </div>
+        <div class="period" data-default="0">
+          <span class="period-label">분석 기간 <small>(확률 계산에 쓰는 기간)</small></span>
+          <div class="seg"><button type="button" data-years="3">3년</button><button type="button" data-years="5">5년</button><button type="button" data-years="0">10년 전체</button></div>
+          <div class="row">
+            <label>시작<input type="month" name="from"></label>
+            <label>끝<input type="month" name="to"></label>
+          </div>
+        </div>
         <button type="submit" class="primary">비교하기</button>
+      </form>
+      <div class="result card" hidden></div>
+    </section>
+
+    <!-- 종목 대결 -->
+    <section class="panel" id="battle" hidden>
+      <form class="card" data-calc="battle">
+        <p class="intro">종목끼리 붙여 보세요. <strong>같은 기간, 같은 돈</strong>을 넣었을 때 누가 이겼는지 보여드려요. (최대 4개)</p>
+        <div class="pick" data-max="4">
+          <label>종목 추가 <small>(주식·ETF·코인)</small>
+            <input name="pickq" type="search" placeholder="예: 삼성전자, 테슬라, 비트코인" autocomplete="off" enterkeyhint="search">
+          </label>
+          <ul class="suggest" hidden></ul>
+          <div class="chips">
+            <button type="button" data-symbol="005930.KS">삼성전자</button>
+            <button type="button" data-symbol="000660.KS">SK하이닉스</button>
+            <button type="button" data-symbol="069500.KS">KODEX 200</button>
+            <button type="button" data-symbol="360750.KS">TIGER 미국S&amp;P500</button>
+            <button type="button" data-symbol="BTC-KRW">비트코인</button>
+            <button type="button" data-symbol="TSLA">테슬라</button>
+            <button type="button" data-symbol="NVDA">엔비디아</button>
+            <button type="button" data-symbol="QQQ">QQQ</button>
+            <button type="button" data-symbol="SCHD">SCHD</button>
+            <button type="button" data-symbol="411060.KS">ACE KRX금현물</button>
+          </div>
+          <div class="picked-list"></div>
+        </div>
+        <div class="row">
+          <label>투자 방식
+            <select name="kind">
+              <option value="saving">매월 적립</option>
+              <option value="deposit">한 번에 투자</option>
+            </select>
+          </label>
+          <label><span data-battle-amount>월 투자액 (원)</span><input name="amount" inputmode="numeric" data-money value="500,000"></label>
+        </div>
+        <div class="period" data-default="3">
+          <span class="period-label">투자 기간</span>
+          <div class="seg"><button type="button" data-years="1">1년</button><button type="button" data-years="3">3년</button><button type="button" data-years="5">5년</button><button type="button" data-years="10">10년</button><button type="button" data-years="max">최대</button></div>
+          <div class="row">
+            <label>시작<input type="month" name="from"></label>
+            <label>끝<input type="month" name="to"></label>
+          </div>
+        </div>
+        <div class="row">
+          <label>적금과도 비교 (연 %)<input name="rate" type="number" step="0.01" min="0" value="3.5"></label>
+          <label>세금
+            <select name="taxmode">
+              <option value="after">세후 (자동 판정)</option>
+              <option value="before">세전</option>
+            </select>
+          </label>
+        </div>
+        <button type="submit" class="primary">⚔️ 대결 시작</button>
       </form>
       <div class="result card" hidden></div>
     </section>

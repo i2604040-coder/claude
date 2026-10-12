@@ -68,8 +68,8 @@ export function dropSpikes(entries, k) {
   });
 }
 
-async function yahooMonthly(symbol, spike = 4) {
-  const data = await getJSON(`${YAHOO_CHART}${encodeURIComponent(symbol)}?range=10y&interval=1mo&events=div`, 3600);
+async function yahooMonthly(symbol, spike = 4, range = '10y') {
+  const data = await getJSON(`${YAHOO_CHART}${encodeURIComponent(symbol)}?range=${range}&interval=1mo&events=div`, 3600);
   const res = data && data.chart && data.chart.result && data.chart.result[0];
   if (!res || !res.timestamp) throw new Error('not found');
   const adj = res.indicators.adjclose && res.indicators.adjclose[0] && res.indicators.adjclose[0].adjclose;
@@ -86,19 +86,19 @@ async function yahooMonthly(symbol, spike = 4) {
 }
 
 /** 월봉 수정주가를 원화로 환산해 반환 */
-export async function monthlyKRW(symbol) {
+export async function monthlyKRW(symbol, range = '10y') {
   let tried = [symbol];
   if (/^[0-9A-Z]{6}$/.test(symbol) && /^\d/.test(symbol)) tried = [`${symbol}.KS`, `${symbol}.KQ`];
   let got = null, used = null;
   for (const s of tried) {
-    try { got = await yahooMonthly(s); used = s; break; } catch (_) { /* 다음 후보 */ }
+    try { got = await yahooMonthly(s, 4, range); used = s; break; } catch (_) { /* 다음 후보 */ }
   }
   if (!got) throw new Error('종목을 찾을 수 없어요');
   const { meta, months } = got;
   const currency = (meta.currency || 'KRW').toUpperCase();
   let fx = null;
   if (currency !== 'KRW') {
-    fx = (await yahooMonthly(`${currency}KRW=X`, 1.5)).months;
+    fx = (await yahooMonthly(`${currency}KRW=X`, 1.5, range)).months;
   }
   const dates = [], close = [];
   for (const [m, c] of months) {

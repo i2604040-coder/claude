@@ -268,7 +268,87 @@
     };
   }
 
-  const api = { RATES, netSalary, loan, savings, severance, progressiveTax, earnedIncomeDeduction,
+  /** 'YYYY-MM' 범위 [from, to]에 해당하는 인덱스 (없으면 -1) */
+  function rangeIndex(dates, from, to) {
+    let s = -1, e = -1;
+    for (let i = 0; i < dates.length; i++) {
+      if (s < 0 && (!from || dates[i] >= from)) s = i;
+      if (!to || dates[i] <= to) e = i;
+    }
+    return s >= 0 && e >= s ? [s, e] : [-1, -1];
+  }
+
+  /** 기간으로 잘라낸 상품 사본 */
+  function sliceProduct(p, from, to) {
+    const [s, e] = rangeIndex(p.dates, from, to);
+    if (s < 0) return { ...p, dates: [], close: [] };
+    return { ...p, dates: p.dates.slice(s, e + 1), close: p.close.slice(s, e + 1) };
+  }
+
+  /** 여러 종목이 모두 시세를 가진 공통 기간 */
+  function commonRange(products, from, to) {
+    let start = from || '', end = to || '9999-12';
+    for (const p of products) {
+      if (!p.dates.length) continue;
+      if (p.dates[0] > start) start = p.dates[0];
+      if (p.dates[p.dates.length - 1] < end) end = p.dates[p.dates.length - 1];
+    }
+    return { from: start, to: end, ok: start <= end };
+  }
+
+  /** 기간 안에서 모든 종목에 시세가 있는 달만 남겨 같은 날짜축으로 맞춤 */
+  function alignProducts(products, from, to) {
+    const sets = products.map((p) => new Set(p.dates.filter((d) => (!from || d >= from) && (!to || d <= to))));
+    const common = [...sets[0]].filter((d) => sets.every((st) => st.has(d))).sort();
+    const keep = new Set(common);
+    return products.map((p) => {
+      const idx = p.dates.map((d, i) => (keep.has(d) ? i : -1)).filter((i) => i >= 0);
+      return { ...p, dates: idx.map((i) => p.dates[i]), close: idx.map((i) => p.close[i]) };
+    });
+  }
+
+  /**
+   * 종목 대결: 기간 [from, to] 동안 적립식/거치식 투자 결과와 위험 지표
+   * @param {boolean} afterTax false면 세전 비교
+   */
+  function battle(product, kind, amount, from, to, afterTax = true) {
+    const { dates, close } = product;
+    const [s, e] = rangeIndex(dates, from, to);
+    if (s < 0 || e - s < 1) return { enough: false };
+    const r = investWindow(close, s, e, kind, amount, afterTax ? product.tax : 'free');
+    const series = [];
+    let units = 0;
+    for (let t = s; t <= e; t++) {
+      if (kind === 'saving') {
+        if (t < e) units += amount / close[t];
+        series.push({ date: dates[t], value: units * close[t], principal: amount * Math.min(t - s + 1, e - s) });
+      } else {
+        series.push({ date: dates[t], value: amount * close[t] / close[s], principal: amount });
+      }
+    }
+    let peak = close[s], mdd = 0, worst = null, best = null;
+    const rets = [];
+    for (let t = s + 1; t <= e; t++) {
+      peak = Math.max(peak, close[t]);
+      mdd = Math.min(mdd, close[t] / peak - 1);
+      const m = close[t] / close[t - 1] - 1;
+      rets.push(m);
+      if (!worst || m < worst.ret) worst = { ret: m, date: dates[t] };
+      if (!best || m > best.ret) best = { ret: m, date: dates[t] };
+    }
+    const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
+    const vol = Math.sqrt(rets.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, rets.length - 1)) * Math.sqrt(12);
+    const months = e - s;
+    return {
+      enough: true, ...r, tax: r.value - r.afterTax, from: dates[s], to: dates[e], months,
+      profitRate: r.afterTax / r.principal - 1,
+      priceReturn: close[e] / close[s] - 1,
+      cagr: Math.pow(close[e] / close[s], 12 / months) - 1,
+      mdd, vol, worstMonth: worst, bestMonth: best, series,
+    };
+  }
+
+  const api = { RATES, rangeIndex, sliceProduct, commonRange, alignProducts, battle, netSalary, loan, savings, severance, progressiveTax, earnedIncomeDeduction,
     investWindow, compareSavings, compareLoan, investTax, guessTax, TAX_LABELS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
