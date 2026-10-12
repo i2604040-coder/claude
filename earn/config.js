@@ -8,6 +8,9 @@ window.SITE_CONFIG = {
   tossQrImage: 'toss-qr.png',
   kakaoPayUrl: 'https://qr.kakaopay.com/Ej8kSvBqe',
 
+  // 직접 고른 종목 시세 API (Cloudflare Pages Functions). GitHub Pages에서도 이 주소의 API를 사용
+  apiBase: 'https://doncalc.pages.dev',
+
   // 2) 쿠팡 파트너스 — partners.coupang.com 가입 후 '링크 생성'으로 만든 단축 링크
   //    결과 화면 아래에 계산 종류별로 맞는 상품 링크가 노출됩니다.
   coupangLinks: {
