@@ -3,6 +3,14 @@
 2026년 기준 **연봉 실수령액 · 대출 이자 · 예·적금 이자 · 퇴직금** 계산기를 한 페이지에 모은 정적 웹사이트입니다.
 서버·DB가 필요 없어 **GitHub Pages로 0원에 운영**되고, `config.js` 한 파일만 채우면 수익 장치가 켜집니다.
 
+## 📈 투자 비교 (적금·예금·대출 vs 주식·ETF·펀드)
+
+- 같은 돈을 같은 방식(적금=매월 적립, 예금=일시 투자)으로 KODEX 200, 미국 S&P500·나스닥100, 미국배당, 삼성전자, SK하이닉스, 국고채10년, 금, CD금리(MMF 대용)에 넣었을 때의 **세후 결과**
+- 최근 N개월 결과 + 과거 10년 안 모든 N개월 구간 중 **예·적금보다 많았던 확률, 원금 손실 확률, 최악·최고 결과**
+- 대출 모드: 1년 세후 수익률이 **대출 금리를 넘은 확률**과 1·3·5년 연평균 수익률
+- 시세는 `earn/tools/build_market.py`가 Yahoo Finance 월말 수정주가(배당 재투자 반영)로 `earn/market.json` 생성. 배포 워크플로가 평일 장 마감 후 자동 갱신
+- 비교 상품은 `build_market.py`의 `PRODUCTS` 목록만 고치면 추가·변경 가능
+
 ## 왜 이 아이템인가
 
 - "연봉 실수령액", "대출 이자 계산기", "퇴직금 계산기"는 매달 검색량이 꾸준한 키워드 → 광고·제휴 수익과 궁합이 좋음
@@ -30,11 +38,24 @@
 
 > 저장소가 private이면 무료 플랜에서는 Pages를 쓸 수 없습니다. 그럴 땐 `earn/` 폴더를 Netlify Drop(app.netlify.com/drop)에 드래그하면 바로 공개됩니다.
 
+## Cloudflare Pages 배포 (`doncalc.pages.dev`)
+
+같은 워크플로가 GitHub Pages와 함께 Cloudflare Pages 프로젝트 `doncalc`에도 배포합니다. 저장소 Secrets 두 개만 있으면 됩니다.
+
+1. Cloudflare 대시보드 → **Manage Account → Account API Tokens → Create Token → Custom token**, 권한 `Account / Cloudflare Pages / Edit`
+2. Cloudflare 대시보드 오른쪽(또는 Workers & Pages 화면)의 **Account ID** 복사
+3. GitHub 저장소 → **Settings → Secrets and variables → Actions → New repository secret**
+   - `CLOUDFLARE_API_TOKEN` = 1번 토큰
+   - `CLOUDFLARE_ACCOUNT_ID` = 2번 ID
+4. Actions → "돈계산기 GitHub Pages 배포" → **Run workflow**
+
+`doncalc`라는 이름을 다른 사람이 이미 쓰고 있으면 Cloudflare가 `doncalc-xxx.pages.dev`처럼 뒤에 글자를 붙입니다. 실제 주소는 Actions 로그나 Cloudflare 대시보드에서 확인하세요.
+
 ## 홍보 (방문자 = 수익)
 
 - 네이버 서치어드바이저, 구글 서치콘솔에 사이트 등록 (검색 노출 시작)
 - 결과 화면을 캡처해 블로그·카페·커뮤니티에 "2026 연봉별 실수령액 표" 형태로 공유하고 링크 첨부
-- 각 탭은 `#salary`, `#loan`, `#savings`, `#severance` 주소로 바로 열려서 상황별로 공유하기 좋음
+- 각 탭은 `#salary`, `#loan`, `#savings`, `#severance`, `#compare` 주소로 바로 열려서 상황별로 공유하기 좋음
 
 ## 로컬 실행 / 테스트
 

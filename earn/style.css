@@ -101,3 +101,15 @@ footer { padding-bottom: 40px; font-size: 12px; color: var(--muted); }
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
   background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px;
 }
+
+.intro { margin: 0 0 14px; font-size: 14px; }
+.to-compare { width: 100%; margin-top: 14px; padding: 12px; font-weight: 700; }
+.cmp { border-top: 1px solid var(--line); padding: 12px 0; }
+.cmp-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.cmp-head b { font-size: 15px; }
+.tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+.cmp-main { margin: 0; font-size: 14px; }
+.cmp-main b { font-size: 16px; }
+.cmp-sub { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.plus { color: var(--good); }
+.minus { color: var(--bad); }

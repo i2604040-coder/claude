@@ -77,6 +77,7 @@
             <tbody>${rows}</tbody>
           </table></div>
         </details>
+        <button type="button" class="ghost to-compare" data-from="loan">📈 갚을 돈을 투자했다면? (금리 vs 수익률)</button>
         ${affiliate('loan')}`;
     },
 
@@ -92,6 +93,7 @@
           ${row('이자 과세', '-' + won(r.tax), 'minus')}
           ${row('세후 이자', '+' + won(r.interest - r.tax), 'plus')}
         </dl>
+        <button type="button" class="ghost to-compare" data-from="savings">📈 같은 돈을 주식·ETF에 넣었다면?</button>
         ${affiliate('savings')}`;
     },
 
@@ -115,6 +117,68 @@
     },
   };
 
+  // ---------- 투자 비교 ----------
+  let marketPromise = null;
+  const loadMarket = () => (marketPromise ||= fetch('market.json', { cache: 'no-cache' })
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .catch((e) => { marketPromise = null; throw e; }));
+  const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pct = (x, signed = false) => (signed && x > 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
+  const signedWon = (x) => (x >= 0 ? '+' : '-') + won(Math.abs(x));
+  const ym = (s) => s.replace('-', '.');
+  const head = (p) => `<div class="cmp-head"><b>${esc(p.name)}</b><span class="tag">${esc(p.kind)}</span></div>`;
+
+  function compareFooter(data) {
+    return `<p class="note">시세: Yahoo Finance 월말 수정주가(배당 재투자 반영), ${esc(data.updated)} 갱신.
+      국내주식·국내주식형 ETF는 매매차익 비과세, 그 외 ETF는 이익에 15.4% 과세로 계산했어요.
+      개별 종목은 지금 시가총액 상위 종목이라 과거 성과가 실제보다 좋아 보일 수 있어요(생존 편향). 과거 결과가 미래 수익을 보장하지 않으며, 투자 상품은 원금 손실이 날 수 있어요.
+      예·적금은 예금자보호(1인당 1억원) 대상입니다. 투자 권유가 아닌 참고용 정보입니다.</p>`;
+  }
+
+  async function renderCompare(f) {
+    const data = await loadMarket();
+    const mode = f.mode.value;
+    const rate = num(f.rate.value);
+
+    if (mode === 'loan') {
+      const items = data.products.map((p) => ({ p, c: Calc.compareLoan(p, rate) }))
+        .sort((a, b) => b.c.beatRate - a.c.beatRate);
+      const cards = items.map(({ p, c }) => {
+        if (!c.enough) return `<div class="cmp">${head(p)}<p class="cmp-sub">데이터 부족</p></div>`;
+        const cagr = [['1년', c.r1], ['3년', c.r3], ['5년', c.r5]]
+          .map(([l, v]) => `${l} ${v === null ? '–' : `<span class="${v * 100 > rate ? 'plus' : 'minus'}">${pct(v, true)}</span>`}`).join(' · ');
+        return `<div class="cmp">${head(p)}
+          <p class="cmp-main">대출 금리를 넘은 확률 <b class="${c.beatRate >= 0.5 ? 'plus' : 'minus'}">${pct(c.beatRate)}</b></p>
+          <p class="cmp-sub">연평균 수익률(세전) ${cagr}<br>
+          과거 ${c.windows}번의 1년 구간 기준(세후) · 최악의 1년 ${pct(c.worst.ret, true)} (${ym(c.worst.from)}~${ym(c.worst.to)})</p></div>`;
+      }).join('');
+      return `<p class="headline">대출을 갚으면 확실하게 아끼는 이자</p>
+        <p class="big">연 ${rate}%</p>
+        <p class="note" style="margin:0 0 12px">대출을 갚는 대신 그 돈을 투자했을 때, 1년 뒤 세후 수익률이 대출 금리보다 높았던 비율이에요. 50% 미만이면 대출 상환이 유리했던 경우가 더 많았다는 뜻입니다.</p>
+        ${cards}${compareFooter(data)}`;
+    }
+
+    const amount = num(f.amount.value);
+    const months = Math.max(1, Math.min(120, num(f.months.value)));
+    const sv = Calc.savings(mode, amount, rate, months, f.tax.value, false);
+    const label = mode === 'saving' ? '적금' : '예금';
+    const items = data.products.map((p) => ({ p, c: Calc.compareSavings(p, mode, amount, months, sv.afterTax) }))
+      .sort((a, b) => (b.c.enough - a.c.enough) || (b.c.enough ? b.c.winRate - a.c.winRate : 0));
+    const cards = items.map(({ p, c }) => {
+      if (!c.enough) return `<div class="cmp">${head(p)}<p class="cmp-sub">상장 후 ${c.months}개월뿐이라 ${months}개월 비교는 아직 못 해요.</p></div>`;
+      const diff = c.latest.afterTax - sv.afterTax;
+      return `<div class="cmp">${head(p)}
+        <p class="cmp-main">최근 ${months}개월 넣었다면 <b>${won(c.latest.afterTax)}</b>
+          <span class="${diff >= 0 ? 'plus' : 'minus'}">(${label}보다 ${signedWon(diff)})</span></p>
+        <p class="cmp-sub">과거 ${c.windows}번의 ${months}개월 구간 중 <b>${pct(c.winRate)}</b>는 ${label}보다 많았고, ${pct(c.lossRate)}는 원금 손실<br>
+        최악 ${won(c.worst.afterTax)} (${ym(c.worst.from)}~${ym(c.worst.to)}) · 최고 ${won(c.best.afterTax)}</p></div>`;
+    }).join('');
+    return `<p class="headline">내 ${label} ${months}개월 세후 만기액 (원금 ${won(sv.principal)})</p>
+      <p class="big">${won(sv.afterTax)}</p>
+      <p class="note" style="margin:0 0 12px">같은 돈을 같은 방식(${mode === 'saving' ? '매월 적립' : '한 번에 투자'})으로 넣었을 때의 세후 금액이에요. '최근'은 지금 끝난 ${months}개월, 확률은 과거 10년 안의 모든 ${months}개월 구간 기준입니다.</p>
+      ${cards}${compareFooter(data)}`;
+  }
+
   // ---------- 폼 동작 ----------
   document.querySelectorAll('input[data-money]').forEach((el) => {
     el.addEventListener('input', () => {
@@ -127,11 +191,20 @@
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const box = form.parentElement.querySelector('.result');
-      box.innerHTML = renderers[form.dataset.calc](form.elements);
-      box.hidden = false;
-      resultShown = true;
-      refreshSupport();
-      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const show = (html) => {
+        box.innerHTML = html;
+        box.hidden = false;
+        resultShown = true;
+        refreshSupport();
+        box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      };
+      if (form.dataset.calc === 'compare') {
+        show('<p class="headline">최신 시세 불러오는 중…</p>');
+        renderCompare(form.elements).then(show,
+          () => show('<p class="headline">시세 데이터를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>'));
+      } else {
+        show(renderers[form.dataset.calc](form.elements));
+      }
     });
   });
 
@@ -151,6 +224,36 @@
   }
   tabs.forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
   showTab(location.hash.slice(1));
+  window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+
+  // ---------- 비교 탭 연동 ----------
+  const cmpForm = document.querySelector('form[data-calc="compare"]');
+  function syncCompareMode() {
+    const m = cmpForm.mode.value;
+    cmpForm.querySelectorAll('[data-hide-loan]').forEach((el) => { el.hidden = m === 'loan'; });
+    cmpForm.querySelector('[data-amount-label]').textContent = m === 'saving' ? '월 납입액 (원)' : '예치 금액 (원)';
+    cmpForm.querySelector('[data-rate-label]').textContent =
+      { saving: '적금 연 이자율 (%)', deposit: '예금 연 이자율 (%)', loan: '대출 연 금리 (%)' }[m];
+  }
+  cmpForm.mode.addEventListener('change', syncCompareMode);
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.to-compare');
+    if (!btn) return;
+    const src = document.querySelector(`form[data-calc="${btn.dataset.from}"]`).elements;
+    if (btn.dataset.from === 'loan') {
+      cmpForm.mode.value = 'loan';
+      cmpForm.rate.value = src.rate.value;
+    } else {
+      cmpForm.mode.value = src.kind.value;
+      cmpForm.amount.value = src.amount.value;
+      cmpForm.rate.value = src.rate.value;
+      cmpForm.months.value = src.months.value;
+      cmpForm.tax.value = src.tax.value;
+    }
+    syncCompareMode();
+    showTab('compare');
+    cmpForm.requestSubmit();
+  });
 
   // ---------- 공유 ----------
   function toast(msg) {
