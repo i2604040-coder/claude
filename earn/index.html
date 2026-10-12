@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>돈계산기 – 2026 연봉 실수령액·대출이자·적금이자·퇴직금 계산</title>
-  <meta name="description" content="2026년 기준 연봉 실수령액, 대출 이자(원리금균등·원금균등), 예금·적금 이자, 퇴직금을 1초 만에 계산하세요. 회원가입 없이 무료.">
+  <meta name="description" content="2026년 기준 연봉 실수령액, 대출 이자(원리금균등·원금균등), 예금·적금 이자, 퇴직금 계산과 적금·대출 vs 주식·ETF 수익률 비교. 회원가입 없이 무료.">
   <meta property="og:title" content="돈계산기 – 연봉 실수령액·대출이자·적금이자·퇴직금">
   <meta property="og:description" content="2026년 기준 생활 금융 계산기 모음. 무료, 가입 없음.">
   <meta property="og:type" content="website">
@@ -24,6 +24,7 @@
     <button role="tab" data-tab="loan">대출 이자</button>
     <button role="tab" data-tab="savings">예·적금 이자</button>
     <button role="tab" data-tab="severance">퇴직금</button>
+    <button role="tab" data-tab="compare">📈 투자 비교</button>
   </nav>
 
   <main>
@@ -108,6 +109,34 @@
           <label>연차수당 (1년분)<input name="leave" inputmode="numeric" data-money value="0"></label>
         </div>
         <button type="submit" class="primary">계산하기</button>
+      </form>
+      <div class="result card" hidden></div>
+    </section>
+
+    <!-- 투자 비교 -->
+    <section class="panel" id="compare" hidden>
+      <form class="card" data-calc="compare">
+        <p class="intro">내 적금·예금·대출을 <strong>주식·ETF·펀드</strong>와 비교해요. 같은 돈을 과거 실제 시세로 넣어봤을 때의 결과입니다.</p>
+        <label>비교할 내 상품
+          <select name="mode">
+            <option value="saving">적금 (매월 납입)</option>
+            <option value="deposit">예금 (목돈 예치)</option>
+            <option value="loan">대출 (갚기 vs 투자하기)</option>
+          </select>
+        </label>
+        <label data-hide-loan><span data-amount-label>월 납입액 (원)</span><input name="amount" inputmode="numeric" data-money value="500,000"></label>
+        <div class="row">
+          <label><span data-rate-label>적금 연 이자율 (%)</span><input name="rate" type="number" step="0.01" min="0" value="3.5"></label>
+          <label data-hide-loan>기간 (개월)<input name="months" type="number" min="1" max="108" value="12"></label>
+        </div>
+        <label data-hide-loan>예·적금 이자 과세
+          <select name="tax">
+            <option value="normal">일반과세 15.4%</option>
+            <option value="preferential">세금우대 9.5%</option>
+            <option value="free">비과세</option>
+          </select>
+        </label>
+        <button type="submit" class="primary">비교하기</button>
       </form>
       <div class="result card" hidden></div>
     </section>

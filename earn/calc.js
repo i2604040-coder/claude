@@ -178,7 +178,80 @@
     return { days, periodDays, dailyAvg: Math.round(dailyAvg), eligible, amount };
   }
 
-  const api = { RATES, netSalary, loan, savings, severance, progressiveTax, earnedIncomeDeduction };
+  const INVEST_TAX = { free: 0, dividend: 0.154 };
+
+  /**
+   * 한 구간(s → e) 투자 결과. 적립식은 s..e-1 매월 매수, e 시점 평가. 거치식은 s에 일시 매수.
+   */
+  function investWindow(close, s, e, kind, amount, taxKind) {
+    let principal, value;
+    if (kind === 'saving') {
+      principal = amount * (e - s);
+      let units = 0;
+      for (let i = s; i < e; i++) units += amount / close[i];
+      value = units * close[e];
+    } else {
+      principal = amount;
+      value = amount * close[e] / close[s];
+    }
+    const gain = value - principal;
+    const tax = gain > 0 ? gain * (INVEST_TAX[taxKind] ?? 0.154) : 0;
+    return { principal, value, afterTax: value - tax };
+  }
+
+  /**
+   * 예·적금과 상품 비교: 과거 모든 N개월 구간에 같은 돈을 넣었을 때의 세후 결과
+   * @param {{dates:string[], close:number[], tax:string}} product
+   * @param {number} benchmark 예·적금 세후 만기 수령액
+   */
+  function compareSavings(product, kind, amount, months, benchmark) {
+    const { close, dates } = product;
+    const n = close.length;
+    if (n - 1 < months) return { enough: false, months: n - 1 };
+    const results = [];
+    for (let e = months; e < n; e++) {
+      const r = investWindow(close, e - months, e, kind, amount, product.tax);
+      results.push({ ...r, from: dates[e - months], to: dates[e] });
+    }
+    const latest = results[results.length - 1];
+    const wins = results.filter((r) => r.afterTax > benchmark).length;
+    const worst = results.reduce((a, b) => (b.afterTax < a.afterTax ? b : a));
+    const best = results.reduce((a, b) => (b.afterTax > a.afterTax ? b : a));
+    const losses = results.filter((r) => r.afterTax < r.principal).length;
+    return {
+      enough: true, latest, worst, best, windows: results.length,
+      winRate: wins / results.length, lossRate: losses / results.length,
+    };
+  }
+
+  /**
+   * 대출 금리와 상품 수익률 비교 (세후 연 수익률)
+   */
+  function compareLoan(product, loanRate) {
+    const { close, dates } = product;
+    const n = close.length;
+    const taxRate = INVEST_TAX[product.tax] ?? 0.154;
+    const afterTax = (r) => (r > 0 ? r * (1 - taxRate) : r);
+    const cagr = (years) => {
+      const m = years * 12;
+      if (n - 1 < m) return null;
+      return Math.pow(close[n - 1] / close[n - 1 - m], 1 / years) - 1;
+    };
+    const yearly = [];
+    for (let e = 12; e < n; e++) yearly.push({ ret: afterTax(close[e] / close[e - 12] - 1), from: dates[e - 12], to: dates[e] });
+    const beat = yearly.filter((y) => y.ret * 100 > loanRate).length;
+    const worst = yearly.length ? yearly.reduce((a, b) => (b.ret < a.ret ? b : a)) : null;
+    return {
+      enough: yearly.length > 0,
+      r1: cagr(1), r3: cagr(3), r5: cagr(5),
+      windows: yearly.length,
+      beatRate: yearly.length ? beat / yearly.length : 0,
+      worst,
+    };
+  }
+
+  const api = { RATES, netSalary, loan, savings, severance, progressiveTax, earnedIncomeDeduction,
+    investWindow, compareSavings, compareLoan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
 })(typeof window !== 'undefined' ? window : globalThis);

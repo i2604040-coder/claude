@@ -4,12 +4,15 @@ on:
   push:
     branches: [main, claude/trading-volume-accumulation-tracker-3tlmjf]
     paths: ['earn/**', '.github/workflows/earn-pages.yml']
+  schedule:
+    - cron: '23 7 * * 1-5'   # 평일 16:23 KST, 장 마감 후 시세 갱신
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  deployments: write
 
 concurrency:
   group: pages
@@ -21,6 +24,10 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CF_PROJECT: doncalc
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,13 +35,30 @@ jobs:
           node-version: 22
       - name: 계산 로직 테스트
         run: node --test earn/tests/calc.test.js
+      - name: 최신 시세 갱신 (실패 시 저장된 데이터 사용)
+        run: python3 earn/tools/build_market.py || echo "시세 갱신 실패, 기존 market.json 사용"
       - name: 배포 파일 준비
         run: |
           mkdir _site
-          cp earn/index.html earn/style.css earn/app.js earn/calc.js earn/config.js earn/robots.txt _site/
+          cp earn/index.html earn/style.css earn/app.js earn/calc.js earn/config.js earn/robots.txt earn/market.json _site/
           [ -f earn/toss-qr.png ] && cp earn/toss-qr.png _site/ || true
           [ -f earn/CNAME ] && cp earn/CNAME _site/ || true
           [ -f earn/ads.txt ] && cp earn/ads.txt _site/ || true
+
+      # Cloudflare Pages (저장소 Secrets에 CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID가 있을 때만)
+      - name: Cloudflare Pages 프로젝트 준비
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
+        run: npx -y wrangler@4 pages project create "$CF_PROJECT" --production-branch=main || true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
+      - name: Cloudflare Pages 배포
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
+        run: npx -y wrangler@4 pages deploy _site --project-name="$CF_PROJECT" --branch=main --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

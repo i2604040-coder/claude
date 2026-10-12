@@ -81,3 +81,41 @@ test('퇴직금: 1년 미만은 0, 정확히 계산', () => {
   assert.strictEqual(r.dailyAvg, 100000);
   assert.strictEqual(r.amount, Math.round(100000 * 30 * 1826 / 365));
 });
+
+const flat = { dates: ['a', 'b', 'c', 'd'], close: [100, 100, 100, 100], tax: 'free' };
+const dbl = { dates: ['a', 'b', 'c'], close: [100, 150, 200], tax: 'dividend' };
+
+test('적립식: 가격이 그대로면 원금 그대로', () => {
+  const r = C.investWindow(flat.close, 0, 3, 'saving', 1000, 'free');
+  assert.strictEqual(r.principal, 3000);
+  near(r.afterTax, 3000, 1e-9);
+});
+
+test('거치식 2배 + 배당소득세 15.4%는 이익에만', () => {
+  const r = C.investWindow(dbl.close, 0, 2, 'deposit', 1000, 'dividend');
+  near(r.value, 2000, 1e-9);
+  near(r.afterTax, 2000 - 1000 * 0.154, 1e-9);
+});
+
+test('적립식 평균단가: 100·150 매수 후 200 평가', () => {
+  const r = C.investWindow(dbl.close, 0, 2, 'saving', 300, 'free');
+  near(r.value, (3 + 2) * 200, 1e-9);
+});
+
+test('compareSavings: 구간 수, 승률, 데이터 부족', () => {
+  const r = C.compareSavings(flat, 'saving', 1000, 2, 1999);
+  assert.strictEqual(r.windows, 2);
+  assert.strictEqual(r.winRate, 1);
+  assert.strictEqual(r.lossRate, 0);
+  assert.strictEqual(C.compareSavings(flat, 'saving', 1000, 12, 0).enough, false);
+});
+
+test('compareLoan: 1년 수익률이 금리를 넘는 비율', () => {
+  const close = Array.from({ length: 25 }, (_, i) => 100 * Math.pow(1.1, i / 12));
+  const r = C.compareLoan({ dates: close.map((_, i) => String(i)), close, tax: 'free' }, 5);
+  assert.strictEqual(r.windows, 13);
+  assert.strictEqual(r.beatRate, 1);
+  near(r.r1, 0.1, 1e-9);
+  assert.strictEqual(r.r3, null);
+  assert.strictEqual(C.compareLoan({ dates: close.map(String), close, tax: 'free' }, 12).beatRate, 0);
+});
