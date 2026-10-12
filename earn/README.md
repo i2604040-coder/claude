@@ -13,8 +13,8 @@
 
 | 수단 | 수익 발생 시점 | 설정 방법 |
 |---|---|---|
-| **토스 후원** | 누가 누르면 **즉시** 내 토스 계좌로 입금 | 토스 앱 → 전체 → '토스아이디' 생성 → `tossMeUrl: 'https://toss.me/아이디'` |
-| **카카오페이 후원** | 즉시 | 카카오페이 → 송금 → '송금코드' 링크 복사 → `kakaoPayUrl` |
+| **토스 QR 후원** | 스캔·송금 즉시 내 토스 계좌로 입금 | 토스 앱의 '송금 QR' 이미지를 `earn/toss-qr.png`로 저장 (파일이 있으면 자동 표시) |
+| **카카오페이 후원** | 즉시 | `kakaoPayUrl` (설정 완료) |
 | **쿠팡 파트너스** | 링크 클릭 후 24시간 내 구매 시 약 3% 적립 (월 정산) | partners.coupang.com 가입 → 링크 생성 → `coupangLinks.*.url` (가입 직후 바로 사용 가능, 대가성 문구 자동 표시) |
 | **구글 애드센스** | 승인 후 노출·클릭당 (월 정산) | 사이트 공개 후 신청 → 승인되면 `adsenseClient`, `adsenseSlot` 입력 + `earn/ads.txt` 추가 |
 
@@ -22,8 +22,8 @@
 
 ## 배포 (5분)
 
-1. `earn/config.js`에 토스아이디 링크 등 입력 후 커밋
-2. 이 브랜치를 `main`에 머지
+1. `earn/toss-qr.png` 업로드, 필요하면 `earn/config.js`에 쿠팡 링크 입력 후 커밋
+2. 기본 브랜치에 머지 (워크플로는 `main`과 현재 기본 브랜치 push 시 실행)
 3. GitHub 저장소 → **Settings → Pages → Source: GitHub Actions** 선택
 4. Actions 탭에서 "돈계산기 GitHub Pages 배포"가 돌면 `https://<깃허브아이디>.github.io/<저장소명>/` 에 공개됨
    (`workflow_dispatch`로 수동 실행도 가능)

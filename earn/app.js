@@ -129,7 +129,8 @@
       const box = form.parentElement.querySelector('.result');
       box.innerHTML = renderers[form.dataset.calc](form.elements);
       box.hidden = false;
-      document.getElementById('support').hidden = !hasSupport;
+      resultShown = true;
+      refreshSupport();
       box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
   });
@@ -170,15 +171,38 @@
 
   // ---------- 수익화 ----------
   const supportBtns = document.querySelector('.support-btns');
-  if (isHttps(CFG.tossMeUrl)) {
-    supportBtns.insertAdjacentHTML('beforeend', '<a class="toss" target="_blank" rel="noopener">토스로 후원</a>');
-    supportBtns.lastElementChild.href = CFG.tossMeUrl;
-  }
+  const supportBox = document.getElementById('support');
+  let hasSupport = false;
+  let resultShown = false;
+  const refreshSupport = () => { supportBox.hidden = !(hasSupport && resultShown); };
+
   if (isHttps(CFG.kakaoPayUrl)) {
     supportBtns.insertAdjacentHTML('beforeend', '<a class="kakao" target="_blank" rel="noopener">카카오페이로 후원</a>');
     supportBtns.lastElementChild.href = CFG.kakaoPayUrl;
+    hasSupport = true;
   }
-  const hasSupport = supportBtns.children.length > 0;
+  if (CFG.tossQrImage) {
+    // 이미지가 실제로 있을 때만 토스 QR 버튼을 노출
+    const img = new Image();
+    img.alt = '토스 송금 QR 코드';
+    img.onload = () => {
+      const btn = document.createElement('a');
+      btn.className = 'toss';
+      btn.href = '#';
+      btn.textContent = '토스로 후원 (QR)';
+      supportBtns.prepend(btn);
+      const qr = document.createElement('div');
+      qr.className = 'qr';
+      qr.hidden = true;
+      qr.appendChild(img);
+      qr.insertAdjacentHTML('beforeend', '<p>토스 앱 → 홈 상단 스캔 버튼으로 QR을 찍어주세요.<br>휴대폰이라면 길게 눌러 이미지를 저장한 뒤 토스에서 불러오세요.</p>');
+      supportBox.appendChild(qr);
+      btn.addEventListener('click', (e) => { e.preventDefault(); qr.hidden = !qr.hidden; });
+      hasSupport = true;
+      refreshSupport();
+    };
+    img.src = CFG.tossQrImage;
+  }
 
   const hasCoupang = CFG.coupangLinks && Object.values(CFG.coupangLinks).some((l) => l && isHttps(l.url));
   document.querySelector('.disclosure').hidden = !hasCoupang;

@@ -87,6 +87,9 @@ button.ghost {
   flex: 1; text-align: center; padding: 11px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 14px;
 }
 .support-btns .toss { background: #0064ff; color: #fff; }
+.qr { margin-top: 12px; text-align: center; }
+.qr img { width: 200px; max-width: 70%; border-radius: 12px; background: #fff; padding: 8px; }
+.qr p { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 .support-btns .kakao { background: #fee500; color: #191919; }
 
 .share { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--muted); }

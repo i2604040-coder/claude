@@ -3,9 +3,10 @@
 window.SITE_CONFIG = {
   siteName: '돈계산기',
 
-  // 1) 후원 (즉시 수익) — 토스 앱 > 전체 > 토스아이디 만들기 → https://toss.me/아이디
-  tossMeUrl: '',          // 예: 'https://toss.me/myid'
-  kakaoPayUrl: '',        // 예: 'https://qr.kakaopay.com/XXXXXXXX' (카카오페이 > 송금 > 송금코드)
+  // 1) 후원 (즉시 수익)
+  //    토스: 토스 앱 > 송금 > 'QR로 받기' 이미지를 earn/toss-qr.png 로 저장하면 자동 표시 (파일이 없으면 숨김)
+  tossQrImage: 'toss-qr.png',
+  kakaoPayUrl: 'https://qr.kakaopay.com/Ej8kSvBqe',
 
   // 2) 쿠팡 파트너스 — partners.coupang.com 가입 후 '링크 생성'으로 만든 단축 링크
   //    결과 화면 아래에 계산 종류별로 맞는 상품 링크가 노출됩니다.
