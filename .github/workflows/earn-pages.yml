@@ -1,0 +1,42 @@
+name: 돈계산기 GitHub Pages 배포
+
+on:
+  push:
+    branches: [main, claude/trading-volume-accumulation-tracker-3tlmjf]
+    paths: ['earn/**', '.github/workflows/earn-pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 계산 로직 테스트
+        run: node --test earn/tests/calc.test.js
+      - name: 배포 파일 준비
+        run: |
+          mkdir _site
+          cp earn/index.html earn/style.css earn/app.js earn/calc.js earn/config.js earn/robots.txt _site/
+          [ -f earn/toss-qr.png ] && cp earn/toss-qr.png _site/ || true
+          [ -f earn/ads.txt ] && cp earn/ads.txt _site/ || true
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

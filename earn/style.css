@@ -1,0 +1,102 @@
+:root {
+  --bg: #f2f4f6;
+  --card: #ffffff;
+  --text: #191f28;
+  --muted: #6b7684;
+  --line: #e5e8eb;
+  --accent: #3182f6;
+  --accent-ink: #ffffff;
+  --good: #1b9c5a;
+  --bad: #e5484d;
+  --radius: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101113;
+    --card: #1c1d20;
+    --text: #f2f4f6;
+    --muted: #9ea4ad;
+    --line: #2c2e33;
+    --accent: #4c94ff;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
+  line-height: 1.5;
+}
+.top, .tabs, main, footer { max-width: 560px; margin: 0 auto; padding: 0 16px; }
+.top { padding-top: 28px; }
+.top h1 { margin: 0; font-size: 26px; }
+.sub { margin: 4px 0 16px; color: var(--muted); font-size: 14px; }
+
+.tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
+.tabs button {
+  flex: 0 0 auto; border: 0; border-radius: 999px; padding: 9px 14px;
+  background: var(--card); color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+
+.card { background: var(--card); border-radius: var(--radius); padding: 18px; margin-bottom: 12px; }
+form label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+form input, form select {
+  display: block; width: 100%; margin-top: 4px; padding: 11px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text);
+  font: inherit; font-size: 16px;
+}
+form input:focus, form select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.row { display: flex; gap: 10px; }
+.row > label { flex: 1; min-width: 0; }
+
+button.primary {
+  width: 100%; border: 0; border-radius: 12px; padding: 14px; margin-top: 4px;
+  background: var(--accent); color: var(--accent-ink); font: inherit; font-size: 16px; font-weight: 700; cursor: pointer;
+}
+button.ghost {
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px;
+  background: transparent; color: var(--text); font: inherit; font-size: 14px; cursor: pointer;
+}
+
+.result .headline { font-size: 14px; color: var(--muted); margin: 0; }
+.result .big { font-size: 30px; font-weight: 800; margin: 2px 0 14px; letter-spacing: -0.5px; }
+.result dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; font-size: 14px; }
+.result dt { color: var(--muted); }
+.result dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.result dd.minus { color: var(--bad); }
+.result dd.plus { color: var(--good); }
+.result .note { font-size: 12px; color: var(--muted); margin: 12px 0 0; }
+.result details { margin-top: 12px; font-size: 13px; }
+.result summary { cursor: pointer; color: var(--accent); }
+.schedule { max-height: 280px; overflow: auto; margin-top: 8px; }
+.schedule table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.schedule th, .schedule td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.schedule th { position: sticky; top: 0; background: var(--card); color: var(--muted); font-weight: 600; }
+
+.affiliate {
+  display: block; margin-top: 14px; padding: 12px; border-radius: 12px; text-align: center;
+  background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent);
+  font-weight: 700; text-decoration: none; font-size: 15px;
+}
+
+.support p { margin: 0 0 10px; font-size: 14px; }
+.support-btns { display: flex; gap: 8px; }
+.support-btns a {
+  flex: 1; text-align: center; padding: 11px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 14px;
+}
+.support-btns .toss { background: #0064ff; color: #fff; }
+.qr { margin-top: 12px; text-align: center; }
+.qr img { width: 200px; max-width: 70%; border-radius: 12px; background: #fff; padding: 8px; }
+.qr p { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.support-btns .kakao { background: #fee500; color: #191919; }
+
+.share { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--muted); }
+.ad { min-height: 100px; padding: 8px; }
+
+footer { padding-bottom: 40px; font-size: 12px; color: var(--muted); }
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px;
+}

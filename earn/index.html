@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>돈계산기 – 2026 연봉 실수령액·대출이자·적금이자·퇴직금 계산</title>
+  <meta name="description" content="2026년 기준 연봉 실수령액, 대출 이자(원리금균등·원금균등), 예금·적금 이자, 퇴직금을 1초 만에 계산하세요. 회원가입 없이 무료.">
+  <meta property="og:title" content="돈계산기 – 연봉 실수령액·대출이자·적금이자·퇴직금">
+  <meta property="og:description" content="2026년 기준 생활 금융 계산기 모음. 무료, 가입 없음.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#3182f6">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script src="config.js"></script>
+</head>
+<body>
+  <header class="top">
+    <h1>💰 돈계산기</h1>
+    <p class="sub">2026년 기준 · 가입 없이 무료 · 입력값은 내 기기에서만 계산돼요</p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="salary" aria-selected="true">연봉 실수령액</button>
+    <button role="tab" data-tab="loan">대출 이자</button>
+    <button role="tab" data-tab="savings">예·적금 이자</button>
+    <button role="tab" data-tab="severance">퇴직금</button>
+  </nav>
+
+  <main>
+    <!-- 연봉 실수령액 -->
+    <section class="panel" id="salary">
+      <form class="card" data-calc="salary">
+        <label>연봉 (원)<input name="salary" inputmode="numeric" data-money value="40,000,000"></label>
+        <label>월 비과세액 (식대 등)<input name="nonTax" inputmode="numeric" data-money value="200,000"></label>
+        <div class="row">
+          <label>부양가족 수 (본인 포함)<input name="dependents" type="number" min="1" max="20" value="1"></label>
+          <label>8~20세 자녀 수<input name="children" type="number" min="0" max="10" value="0"></label>
+        </div>
+        <button type="submit" class="primary">계산하기</button>
+      </form>
+      <div class="result card" hidden></div>
+    </section>
+
+    <!-- 대출 이자 -->
+    <section class="panel" id="loan" hidden>
+      <form class="card" data-calc="loan">
+        <label>대출 금액 (원)<input name="principal" inputmode="numeric" data-money value="100,000,000"></label>
+        <div class="row">
+          <label>연 이자율 (%)<input name="rate" type="number" step="0.01" min="0" value="4.5"></label>
+          <label>기간 (개월)<input name="months" type="number" min="1" max="600" value="360"></label>
+        </div>
+        <label>상환 방식
+          <select name="method">
+            <option value="equal">원리금균등</option>
+            <option value="principal">원금균등</option>
+            <option value="bullet">만기일시</option>
+          </select>
+        </label>
+        <button type="submit" class="primary">계산하기</button>
+      </form>
+      <div class="result card" hidden></div>
+    </section>
+
+    <!-- 예·적금 이자 -->
+    <section class="panel" id="savings" hidden>
+      <form class="card" data-calc="savings">
+        <label>상품 종류
+          <select name="kind">
+            <option value="saving">적금 (매월 납입)</option>
+            <option value="deposit">예금 (목돈 예치)</option>
+          </select>
+        </label>
+        <label><span data-kind-label>월 납입액 (원)</span><input name="amount" inputmode="numeric" data-money value="500,000"></label>
+        <div class="row">
+          <label>연 이자율 (%)<input name="rate" type="number" step="0.01" min="0" value="3.5"></label>
+          <label>기간 (개월)<input name="months" type="number" min="1" max="600" value="12"></label>
+        </div>
+        <div class="row">
+          <label>이자 과세
+            <select name="tax">
+              <option value="normal">일반과세 15.4%</option>
+              <option value="preferential">세금우대 9.5%</option>
+              <option value="free">비과세</option>
+            </select>
+          </label>
+          <label>이자 방식
+            <select name="compound">
+              <option value="0">단리</option>
+              <option value="1">월복리</option>
+            </select>
+          </label>
+        </div>
+        <button type="submit" class="primary">계산하기</button>
+      </form>
+      <div class="result card" hidden></div>
+    </section>
+
+    <!-- 퇴직금 -->
+    <section class="panel" id="severance" hidden>
+      <form class="card" data-calc="severance">
+        <div class="row">
+          <label>입사일<input name="start" type="date" value="2022-03-02"></label>
+          <label>퇴사일<input name="end" type="date" value="2026-10-12"></label>
+        </div>
+        <label>퇴사 전 3개월 급여 합계 (세전)<input name="wage3m" inputmode="numeric" data-money value="10,500,000"></label>
+        <div class="row">
+          <label>연간 상여금<input name="bonus" inputmode="numeric" data-money value="0"></label>
+          <label>연차수당 (1년분)<input name="leave" inputmode="numeric" data-money value="0"></label>
+        </div>
+        <button type="submit" class="primary">계산하기</button>
+      </form>
+      <div class="result card" hidden></div>
+    </section>
+
+    <div id="ad-slot" class="card ad" hidden></div>
+
+    <aside id="support" class="card support" hidden>
+      <p><strong>도움이 되셨나요?</strong> 커피 한 잔 값으로 서버비를 응원해 주세요 ☕</p>
+      <div class="support-btns"></div>
+    </aside>
+
+    <div class="share card">
+      <span>친구에게도 알려주세요</span>
+      <button type="button" id="share-btn" class="ghost">🔗 링크 공유</button>
+    </div>
+  </main>
+
+  <footer>
+    <p>계산 결과는 2026년 요율 기준의 추정치이며 실제 금액과 다를 수 있습니다. 중요한 결정은 회사·금융기관·관할 기관에 확인하세요.</p>
+    <p class="disclosure" hidden>이 사이트는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+  </footer>
+
+  <script src="calc.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
