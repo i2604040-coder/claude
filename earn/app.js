@@ -237,7 +237,7 @@
   /** 평가금액 추이 선 차트 (SVG, 크로스헤어 툴팁) */
   function lineChart(host, lines) {
     const W = Math.max(300, host.clientWidth || 340), H = 240;
-    const pad = { l: 44, r: 64, t: 12, b: 26 };
+    const pad = { l: 44, r: 10, t: 12, b: 26 };
     const n = lines[0].points.length;
     const all = lines.flatMap((l) => l.points.map((p) => p.v));
     let lo = Math.min(0, ...all), hi = Math.max(...all);
@@ -266,12 +266,9 @@
         class: 'line' + (l.dash ? ' dash' : ''), style: `stroke:${l.color}`,
       }, svg);
     });
-    // 선 끝 이름표 (겹치지 않게 위아래로 밀기)
-    const ends = lines.filter((l) => l.label).map((l) => ({ l, y: y(l.points[n - 1].v) })).sort((a, b) => a.y - b.y);
-    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
-    ends.forEach(({ l, y: yy }) => {
+    // 선 끝 점
+    lines.filter((l) => !l.dash).forEach((l) => {
       el('circle', { cx: x(n - 1), cy: y(l.points[n - 1].v), r: 3.5, style: `fill:${l.color}`, class: 'end-dot' }, svg);
-      el('text', { x: W - pad.r + 6, y: yy + 4, class: 'end-label' }, svg).textContent = l.label.length > 7 ? l.label.slice(0, 7) + '…' : l.label;
     });
     // 크로스헤어 + 툴팁
     const cross = el('line', { y1: pad.t, y2: H - pad.b, class: 'cross', visibility: 'hidden' }, svg);
@@ -331,27 +328,52 @@
     let sv = null;
     if (rate > 0) {
       const pts = results[0].r.series.map((pt, k) => ({ d: pt.date, v: k === 0 ? amount : Calc.savings(kind, amount, rate, k, 'normal').afterTax }));
-      sv = { name: `적금·예금 연 ${rate}%`, color: 'var(--s-muted)', dash: true, points: pts, final: pts[pts.length - 1].v };
+      sv = { name: `적금 연 ${rate}%`, color: 'var(--s-muted)', dash: true, points: pts, final: pts[pts.length - 1].v };
     }
     const ranked = [...results].sort((a, b) => b.r.afterTax - a.r.afterTax);
     const win = ranked[0];
     const principal = win.r.principal;
-    const head = ranked.length > 1
-      ? `<p class="headline">${ym(cr.from)}~${ym(cr.to)} (${months}개월) · 원금 ${won(principal)}</p>
-         <p class="big">🏆 ${esc(win.p.name)} 승</p>`
-      : `<p class="headline">${ym(cr.from)}~${ym(cr.to)} (${months}개월) · 원금 ${won(principal)}</p>
-         <p class="big">${won(win.r.afterTax)}</p>`;
-    const cards = ranked.map(({ p, r }, i) => `
-      <div class="cmp${i === 0 && ranked.length > 1 ? ' mine' : ''}">
-        <div class="cmp-head"><i class="swatch" style="background:${p.color}"></i><b>${i + 1}위 ${esc(p.name)}</b><span class="tag">${esc(p.kind)}</span></div>
-        <p class="cmp-main"><b>${won(r.afterTax)}</b> <span class="${r.profitRate >= 0 ? 'plus' : 'minus'}">(${pct(r.profitRate, true)}, ${signedWon(r.afterTax - r.principal)})</span></p>
-        <p class="cmp-sub">가격 ${pct(r.priceReturn, true)} · 연평균 ${pct(r.cagr, true)} · 최대 낙폭 <span class="minus">${pct(r.mdd)}</span> · 변동성(연) ${pct(r.vol)}<br>
-        최고의 달 ${pct(r.bestMonth.ret, true)} (${ym(r.bestMonth.date)}) · 최악의 달 ${pct(r.worstMonth.ret, true)} (${ym(r.worstMonth.date)})${afterTax ? ` · 세금 ${won(r.tax)} (${esc(Calc.TAX_LABELS[p.tax])})` : ''}</p>
-      </div>`).join('');
-    const svRow = sv ? `<div class="cmp"><div class="cmp-head"><i class="swatch dash" style="background:var(--s-muted)"></i><b>${esc(sv.name)}</b><span class="tag">원금 보장</span></div>
-        <p class="cmp-main"><b>${won(sv.final)}</b> <span class="plus">(${pct(sv.final / principal - 1, true)})</span></p></div>` : '';
+    const head = `<p class="headline">${ym(cr.from)}~${ym(cr.to)} · ${months}개월 · ${kind === 'saving' ? '매월' : '한 번에'} ${won(amount)} (원금 ${won(principal)})</p>
+      <p class="big">${ranked.length > 1 ? `🏆 ${esc(win.p.name)} 승` : won(win.r.afterTax)}</p>`;
+
+    // ① 한눈에 보는 순위표 (최종 금액 막대)
+    const entries = ranked.map(({ p, r }) => ({ name: p.name, color: p.color, final: r.afterTax, rate: r.profitRate }));
+    if (sv) entries.push({ name: sv.name, color: 'var(--s-muted)', final: sv.final, rate: sv.final / principal - 1, base: true });
+    entries.sort((a, b) => b.final - a.final);
+    const maxV = Math.max(...entries.map((e) => e.final), principal);
+    let rank = 0;
+    const board = `<ol class="board">${entries.map((e) => `
+      <li class="${e.base ? 'base' : ''}">
+        <div class="b-top"><span class="b-rank">${e.base ? '–' : ++rank}</span><i class="swatch${e.base ? ' dash' : ''}" style="background:${e.color}"></i>
+          <b class="b-name">${esc(e.name)}</b><span class="b-val">${won(e.final)}</span></div>
+        <div class="b-bar"><div class="track" style="--p:${(principal / maxV * 100).toFixed(1)}%"><span style="width:${Math.max(1, e.final / maxV * 100).toFixed(1)}%;background:${e.color}"></span></div>
+          <em class="${e.rate >= 0 ? 'plus' : 'minus'}">${pct(e.rate, true)}</em></div>
+      </li>`).join('')}</ol>
+      <p class="b-note">막대 속 세로선 = 넣은 돈 ${won(principal)}${afterTax ? ' · 세후 금액' : ' · 세전 금액'}</p>`;
+
+    // ② 핵심 지표 표
+    const metrics = `<table class="metrics">
+      <thead><tr><th>종목</th><th>연평균</th><th>최대 낙폭</th><th>변동성</th></tr></thead>
+      <tbody>${ranked.map(({ p, r }) => `<tr>
+        <td><i class="swatch" style="background:${p.color}"></i><span>${esc(p.name)}</span></td>
+        <td class="${r.cagr >= 0 ? 'plus' : 'minus'}">${pct(r.cagr, true)}</td>
+        <td class="minus">${pct(r.mdd)}</td>
+        <td>${pct(r.vol)}</td></tr>`).join('')}</tbody></table>
+      <p class="b-note">연평균 = 가격 기준 연 수익률 · 최대 낙폭 = 고점 대비 가장 크게 떨어진 비율 · 변동성 = 연간 출렁임(클수록 위험)</p>`;
+
+    // ③ 자세히 (접기)
+    const more = `<details class="more"><summary>종목별 자세히 보기</summary>${ranked.map(({ p, r }) => `
+      <div class="more-item"><div class="cmp-head"><i class="swatch" style="background:${p.color}"></i><b>${esc(p.name)}</b><span class="tag">${esc(p.kind)}</span></div>
+        <dl>
+          <dt>평가 금액</dt><dd>${won(r.value)}</dd>
+          ${afterTax ? `<dt>세금</dt><dd>${won(r.tax)}</dd><dt>세금 기준</dt><dd>${esc(Calc.TAX_LABELS[p.tax])}</dd>` : ''}
+          <dt>가격 상승률</dt><dd>${pct(r.priceReturn, true)}</dd>
+          <dt>최고의 달</dt><dd class="plus">${pct(r.bestMonth.ret, true)} (${ym(r.bestMonth.date)})</dd>
+          <dt>최악의 달</dt><dd class="minus">${pct(r.worstMonth.ret, true)} (${ym(r.worstMonth.date)})</dd>
+        </dl></div>`).join('')}</details>`;
+
     const legend = [...results.map(({ p }) => `<span><i class="swatch" style="background:${p.color}"></i>${esc(p.name)}</span>`),
-      sv ? `<span><i class="swatch dash" style="background:var(--s-muted)"></i>${esc(sv.name)}</span>` : '',
+      sv ? `<span><i class="swatch dash" style="background:var(--s-muted)"></i>적금</span>` : '',
       '<span><i class="swatch dot"></i>넣은 돈</span>'].join('');
 
     battleChart = () => {
@@ -363,13 +385,17 @@
       lineChart(host, lines);
     };
     return `${head}
-      ${adjusted && late ? `<p class="note" style="margin:0 0 10px">ℹ️ ${esc(late.name)} 시세가 ${ym(late.dates[0])}부터 있어 모든 종목을 같은 기간(${ym(cr.from)}~)으로 맞췄어요.</p>` : ''}
+      ${adjusted && late ? `<p class="note" style="margin:0 0 10px">ℹ️ ${esc(late.name)} 시세가 ${ym(late.dates[0])}부터 있어 모든 종목을 같은 기간으로 맞췄어요.</p>` : ''}
+      ${board}
+      <h3 class="sub-h">평가금액 추이 <small>(차트를 누르면 그 달 금액)</small></h3>
       <div class="legend">${legend}</div>
       <div class="chart-host"></div>
-      ${cards}${svRow}${errors}
+      <h3 class="sub-h">위험·수익 지표</h3>
+      ${metrics}
+      ${more}${errors}
       <p class="note">${kind === 'saving' ? '매월 초 같은 금액을 사서' : '시작 달에 한 번에 사서'} 끝 달 가격으로 평가했어요. 수정주가(배당 재투자) 기준이며, 해외 종목은 그 달 환율로 원화 환산했어요.
-      ${afterTax ? '세금은 종목별로 자동 판정(국내주식·국내주식형 ETF·가상자산 비과세, 기타 국내 ETF 15.4%, 해외 22%·250만원 공제)했어요.' : '세금을 빼기 전 금액이에요.'}
-      최대 낙폭은 기간 중 고점 대비 가장 크게 떨어진 비율입니다. 과거 결과가 미래 수익을 보장하지 않아요.</p>`;
+      ${afterTax ? '세금은 종목별 자동 판정(국내주식·국내주식형 ETF·가상자산 비과세, 기타 국내 ETF 15.4%, 해외 22%·250만원 공제)했어요.' : '세금을 빼기 전 금액이에요.'}
+      과거 결과가 미래 수익을 보장하지 않아요.</p>`;
   }
 
   // ---------- 폼 동작 ----------
@@ -459,8 +485,11 @@
     const items = [];
     const render = () => {
       list.innerHTML = items.map((x, i) => `<div class="picked">${max > 1 ? `<i class="swatch" style="background:var(--s${i + 1})"></i>` : '✅'}
-        <span></span><button type="button" class="ghost" data-rm="${i}" aria-label="빼기">✕</button></div>`).join('');
-      list.querySelectorAll('.picked span').forEach((el, i) => { el.textContent = `${items[i].name || items[i].symbol} (${items[i].symbol})`; });
+        <span class="pk"><b></b><small></small></span><button type="button" class="ghost" data-rm="${i}" aria-label="빼기">✕</button></div>`).join('');
+      list.querySelectorAll('.picked .pk').forEach((el, i) => {
+        el.querySelector('b').textContent = items[i].name || items[i].symbol;
+        el.querySelector('small').textContent = items[i].symbol;
+      });
       onChange(items);
     };
     const add = (it) => {
@@ -520,18 +549,33 @@
   const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
   const addMonths = (m, n) => { const [y, mo] = m.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 1 + n, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
   function createPeriod(root) {
-    const from = root.querySelector('input[name=from]'), to = root.querySelector('input[name=to]');
+    const f = (n) => root.querySelector(`select[name=${n}]`);
+    const fromY = f('fromY'), fromM = f('fromM'), toY = f('toY'), toM = f('toM');
+    const nowY = new Date().getFullYear();
+    const years = Array.from({ length: nowY - 1999 }, (_, i) => nowY - i);
+    const yearOpts = (first) => `<option value="">${first}</option>` + years.map((y) => `<option value="${y}">${y}년</option>`).join('');
+    const monthOpts = Array.from({ length: 12 }, (_, i) => `<option value="${String(i + 1).padStart(2, '0')}">${i + 1}월</option>`).join('');
+    fromY.innerHTML = yearOpts('처음부터'); toY.innerHTML = yearOpts('현재까지');
+    fromM.innerHTML = monthOpts; toM.innerHTML = monthOpts;
+    const sync = () => { fromM.hidden = !fromY.value; toM.hidden = !toY.value; };
+    const set = (ySel, mSel, v) => { ySel.value = v ? v.slice(0, 4) : ''; if (v) mSel.value = v.slice(5, 7); };
     const btns = root.querySelectorAll('.seg button');
     const mark = (y) => btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.years === y)));
     const preset = (y) => {
-      if (y === '0' || y === 'max') { from.value = ''; to.value = ''; } else { to.value = thisMonth(); from.value = addMonths(to.value, -12 * Number(y)); }
-      mark(y);
+      if (y === '0' || y === 'max') { set(fromY, fromM, ''); set(toY, toM, ''); } else {
+        const to = thisMonth();
+        set(toY, toM, to); set(fromY, fromM, addMonths(to, -12 * Number(y)));
+      }
+      sync(); mark(y);
     };
     btns.forEach((b) => b.addEventListener('click', () => preset(b.dataset.years)));
-    [from, to].forEach((el) => el.addEventListener('change', () => mark('')));
+    [fromY, fromM, toY, toM].forEach((el) => el.addEventListener('change', () => {
+      if (el === fromY && fromY.value && !fromM.value) fromM.value = '01';
+      sync(); mark('');
+    }));
     preset(root.dataset.default);
     return {
-      value: () => ({ from: from.value, to: to.value }),
+      value: () => ({ from: fromY.value ? `${fromY.value}-${fromM.value}` : '', to: toY.value ? `${toY.value}-${toM.value}` : '' }),
     };
   }
 

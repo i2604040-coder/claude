@@ -139,7 +139,7 @@
         </label>
         <div class="pick">
           <label>직접 골라 비교하기 <small>(주식·ETF·코인, 선택)</small>
-            <input name="pickq" type="search" placeholder="예: 테슬라, 비트코인, 에코프로, SCHD" autocomplete="off" enterkeyhint="search">
+            <input name="pickq" type="search" placeholder="예: 테슬라, 비트코인" autocomplete="off" enterkeyhint="search">
           </label>
           <ul class="suggest" hidden></ul>
           <div class="chips">
@@ -165,9 +165,9 @@
         <div class="period" data-default="0">
           <span class="period-label">분석 기간 <small>(확률 계산에 쓰는 기간)</small></span>
           <div class="seg"><button type="button" data-years="3">3년</button><button type="button" data-years="5">5년</button><button type="button" data-years="0">10년 전체</button></div>
-          <div class="row">
-            <label>시작<input type="month" name="from"></label>
-            <label>끝<input type="month" name="to"></label>
+          <div class="ym-range">
+            <div class="ym"><span>시작</span><select name="fromY" aria-label="시작 연도"></select><select name="fromM" aria-label="시작 월"></select></div>
+            <div class="ym"><span>끝</span><select name="toY" aria-label="끝 연도"></select><select name="toM" aria-label="끝 월"></select></div>
           </div>
         </div>
         <button type="submit" class="primary">비교하기</button>
@@ -181,7 +181,7 @@
         <p class="intro">종목끼리 붙여 보세요. <strong>같은 기간, 같은 돈</strong>을 넣었을 때 누가 이겼는지 보여드려요. (최대 4개)</p>
         <div class="pick" data-max="4">
           <label>종목 추가 <small>(주식·ETF·코인)</small>
-            <input name="pickq" type="search" placeholder="예: 삼성전자, 테슬라, 비트코인" autocomplete="off" enterkeyhint="search">
+            <input name="pickq" type="search" placeholder="예: 삼성전자, 테슬라" autocomplete="off" enterkeyhint="search">
           </label>
           <ul class="suggest" hidden></ul>
           <div class="chips">
@@ -210,16 +210,16 @@
         <div class="period" data-default="3">
           <span class="period-label">투자 기간</span>
           <div class="seg"><button type="button" data-years="1">1년</button><button type="button" data-years="3">3년</button><button type="button" data-years="5">5년</button><button type="button" data-years="10">10년</button><button type="button" data-years="max">최대</button></div>
-          <div class="row">
-            <label>시작<input type="month" name="from"></label>
-            <label>끝<input type="month" name="to"></label>
+          <div class="ym-range">
+            <div class="ym"><span>시작</span><select name="fromY" aria-label="시작 연도"></select><select name="fromM" aria-label="시작 월"></select></div>
+            <div class="ym"><span>끝</span><select name="toY" aria-label="끝 연도"></select><select name="toM" aria-label="끝 월"></select></div>
           </div>
         </div>
         <div class="row">
-          <label>적금과도 비교 (연 %)<input name="rate" type="number" step="0.01" min="0" value="3.5"></label>
+          <label>적금 비교 (연 %)<input name="rate" type="number" step="0.01" min="0" value="3.5"></label>
           <label>세금
             <select name="taxmode">
-              <option value="after">세후 (자동 판정)</option>
+              <option value="after">세후</option>
               <option value="before">세전</option>
             </select>
           </label>
