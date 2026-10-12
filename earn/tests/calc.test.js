@@ -119,3 +119,18 @@ test('compareLoan: 1년 수익률이 금리를 넘는 비율', () => {
   assert.strictEqual(r.r3, null);
   assert.strictEqual(C.compareLoan({ dates: close.map(String), close, tax: 'free' }, 12).beatRate, 0);
 });
+
+test('해외주식 양도세: 250만원 공제 후 22%', () => {
+  assert.strictEqual(C.investTax(2000000, 'overseas'), 0);
+  near(C.investTax(5000000, 'overseas'), 550000, 1e-6);
+  assert.strictEqual(C.investTax(-100, 'overseas'), 0);
+});
+
+test('세금 자동 판정', () => {
+  assert.strictEqual(C.guessTax('BTC-KRW', '비트코인'), 'free');
+  assert.strictEqual(C.guessTax('005930.KS', '삼성전자'), 'free');
+  assert.strictEqual(C.guessTax('069500.KS', 'KODEX 200'), 'free');
+  assert.strictEqual(C.guessTax('360750.KS', 'TIGER 미국S&P500'), 'dividend');
+  assert.strictEqual(C.guessTax('252670.KS', 'KODEX 200선물인버스2X'), 'dividend');
+  assert.strictEqual(C.guessTax('TSLA', '테슬라'), 'overseas');
+});

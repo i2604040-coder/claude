@@ -130,32 +130,72 @@
 
   function compareFooter(data) {
     return `<p class="note">시세: Yahoo Finance 월말 수정주가(배당 재투자 반영), ${esc(data.updated)} 갱신.
-      국내주식·국내주식형 ETF는 매매차익 비과세, 그 외 ETF는 이익에 15.4% 과세로 계산했어요.
+      국내주식·국내주식형 ETF·가상자산(2027년 과세 예정)은 비과세, 그 외 국내 ETF는 이익의 15.4%, 해외 상장 종목은 250만원 공제 후 22%로 계산했어요. 해외 종목은 그 달의 환율로 원화 환산했습니다.
       개별 종목은 지금 시가총액 상위 종목이라 과거 성과가 실제보다 좋아 보일 수 있어요(생존 편향). 과거 결과가 미래 수익을 보장하지 않으며, 투자 상품은 원금 손실이 날 수 있어요.
       예·적금은 예금자보호(1인당 1억원) 대상입니다. 투자 권유가 아닌 참고용 정보입니다.</p>`;
   }
 
+  // 직접 고른 종목 시세 (Cloudflare Functions API)
+  const apiBase = (CFG.apiBase || '').replace(/\/$/, '');
+  const api = (path) => fetch(apiBase + path).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || '시세를 불러오지 못했어요');
+    return d;
+  });
+  let picked = null; // { symbol, name, type }
+
+  async function loadPicked(f) {
+    if (!picked) return null;
+    const d = await api('/api/chart?symbol=' + encodeURIComponent(picked.symbol));
+    const isKR = /\.(KS|KQ)$/.test(d.symbol), isCoin = d.type === 'CRYPTOCURRENCY' || /-KRW$/.test(d.symbol);
+    const name = picked.name || d.name;
+    const tax = f.picktax.value === 'auto' ? Calc.guessTax(d.symbol, name, d.type) : f.picktax.value;
+    const kind = (isCoin ? '가상자산' : isKR ? '국내' : '해외') + (d.type === 'ETF' ? ' ETF' : '') + (d.converted ? ' · 원화 환산' : '');
+    return { ...d, name, kind, tax, picked: true };
+  }
+
+  function savingCard(p, c, months, label, benchmark) {
+    const taxNote = p.picked ? ` · 세금 ${esc(Calc.TAX_LABELS[p.tax])}` : '';
+    if (!c.enough) return `<div class="cmp${p.picked ? ' mine' : ''}">${head(p)}<p class="cmp-sub">시세가 ${c.months}개월치뿐이라 ${months}개월 비교는 아직 못 해요. 기간을 줄여 보세요.</p></div>`;
+    const diff = c.latest.afterTax - benchmark;
+    return `<div class="cmp${p.picked ? ' mine' : ''}">${head(p)}
+      <p class="cmp-main">최근 ${months}개월 넣었다면 <b>${won(c.latest.afterTax)}</b>
+        <span class="${diff >= 0 ? 'plus' : 'minus'}">(${label}보다 ${signedWon(diff)})</span></p>
+      <p class="cmp-sub">과거 ${c.windows}번의 ${months}개월 구간 중 <b>${pct(c.winRate)}</b>는 ${label}보다 많았고, ${pct(c.lossRate)}는 원금 손실<br>
+      최악 ${won(c.worst.afterTax)} (${ym(c.worst.from)}~${ym(c.worst.to)}) · 최고 ${won(c.best.afterTax)}${taxNote}</p></div>`;
+  }
+
+  function loanCard(p, c, rate) {
+    if (!c.enough) return `<div class="cmp${p.picked ? ' mine' : ''}">${head(p)}<p class="cmp-sub">데이터 부족</p></div>`;
+    const cagr = [['1년', c.r1], ['3년', c.r3], ['5년', c.r5]]
+      .map(([l, v]) => `${l} ${v === null ? '–' : `<span class="${v * 100 > rate ? 'plus' : 'minus'}">${pct(v, true)}</span>`}`).join(' · ');
+    return `<div class="cmp${p.picked ? ' mine' : ''}">${head(p)}
+      <p class="cmp-main">대출 금리를 넘은 확률 <b class="${c.beatRate >= 0.5 ? 'plus' : 'minus'}">${pct(c.beatRate)}</b></p>
+      <p class="cmp-sub">연평균 수익률(세전) ${cagr}<br>
+      과거 ${c.windows}번의 1년 구간 기준(세후) · 최악의 1년 ${pct(c.worst.ret, true)} (${ym(c.worst.from)}~${ym(c.worst.to)})</p></div>`;
+  }
+
   async function renderCompare(f) {
-    const data = await loadMarket();
+    const [data, mine] = await Promise.all([
+      loadMarket(),
+      loadPicked(f).catch((e) => ({ error: e.message })),
+    ]);
     const mode = f.mode.value;
     const rate = num(f.rate.value);
+    const mineHtml = (render) => {
+      if (!mine) return '';
+      if (mine.error) return `<div class="cmp mine"><div class="cmp-head"><b>${esc(picked.name || picked.symbol)}</b></div><p class="cmp-sub">${esc(mine.error)}</p></div>`;
+      return render(mine) + (data.products.length ? '<p class="others">대표 상품과 비교</p>' : '');
+    };
 
     if (mode === 'loan') {
       const items = data.products.map((p) => ({ p, c: Calc.compareLoan(p, rate) }))
         .sort((a, b) => b.c.beatRate - a.c.beatRate);
-      const cards = items.map(({ p, c }) => {
-        if (!c.enough) return `<div class="cmp">${head(p)}<p class="cmp-sub">데이터 부족</p></div>`;
-        const cagr = [['1년', c.r1], ['3년', c.r3], ['5년', c.r5]]
-          .map(([l, v]) => `${l} ${v === null ? '–' : `<span class="${v * 100 > rate ? 'plus' : 'minus'}">${pct(v, true)}</span>`}`).join(' · ');
-        return `<div class="cmp">${head(p)}
-          <p class="cmp-main">대출 금리를 넘은 확률 <b class="${c.beatRate >= 0.5 ? 'plus' : 'minus'}">${pct(c.beatRate)}</b></p>
-          <p class="cmp-sub">연평균 수익률(세전) ${cagr}<br>
-          과거 ${c.windows}번의 1년 구간 기준(세후) · 최악의 1년 ${pct(c.worst.ret, true)} (${ym(c.worst.from)}~${ym(c.worst.to)})</p></div>`;
-      }).join('');
       return `<p class="headline">대출을 갚으면 확실하게 아끼는 이자</p>
         <p class="big">연 ${rate}%</p>
         <p class="note" style="margin:0 0 12px">대출을 갚는 대신 그 돈을 투자했을 때, 1년 뒤 세후 수익률이 대출 금리보다 높았던 비율이에요. 50% 미만이면 대출 상환이 유리했던 경우가 더 많았다는 뜻입니다.</p>
-        ${cards}${compareFooter(data)}`;
+        ${mineHtml((p) => loanCard(p, Calc.compareLoan(p, rate), rate))}
+        ${items.map(({ p, c }) => loanCard(p, c, rate)).join('')}${compareFooter(data)}`;
     }
 
     const amount = num(f.amount.value);
@@ -164,19 +204,11 @@
     const label = mode === 'saving' ? '적금' : '예금';
     const items = data.products.map((p) => ({ p, c: Calc.compareSavings(p, mode, amount, months, sv.afterTax) }))
       .sort((a, b) => (b.c.enough - a.c.enough) || (b.c.enough ? b.c.winRate - a.c.winRate : 0));
-    const cards = items.map(({ p, c }) => {
-      if (!c.enough) return `<div class="cmp">${head(p)}<p class="cmp-sub">상장 후 ${c.months}개월뿐이라 ${months}개월 비교는 아직 못 해요.</p></div>`;
-      const diff = c.latest.afterTax - sv.afterTax;
-      return `<div class="cmp">${head(p)}
-        <p class="cmp-main">최근 ${months}개월 넣었다면 <b>${won(c.latest.afterTax)}</b>
-          <span class="${diff >= 0 ? 'plus' : 'minus'}">(${label}보다 ${signedWon(diff)})</span></p>
-        <p class="cmp-sub">과거 ${c.windows}번의 ${months}개월 구간 중 <b>${pct(c.winRate)}</b>는 ${label}보다 많았고, ${pct(c.lossRate)}는 원금 손실<br>
-        최악 ${won(c.worst.afterTax)} (${ym(c.worst.from)}~${ym(c.worst.to)}) · 최고 ${won(c.best.afterTax)}</p></div>`;
-    }).join('');
     return `<p class="headline">내 ${label} ${months}개월 세후 만기액 (원금 ${won(sv.principal)})</p>
       <p class="big">${won(sv.afterTax)}</p>
       <p class="note" style="margin:0 0 12px">같은 돈을 같은 방식(${mode === 'saving' ? '매월 적립' : '한 번에 투자'})으로 넣었을 때의 세후 금액이에요. '최근'은 지금 끝난 ${months}개월, 확률은 과거 10년 안의 모든 ${months}개월 구간 기준입니다.</p>
-      ${cards}${compareFooter(data)}`;
+      ${mineHtml((p) => savingCard(p, Calc.compareSavings(p, mode, amount, months, sv.afterTax), months, label, sv.afterTax))}
+      ${items.map(({ p, c }) => savingCard(p, c, months, label, sv.afterTax)).join('')}${compareFooter(data)}`;
   }
 
   // ---------- 폼 동작 ----------
@@ -254,6 +286,57 @@
     showTab('compare');
     cmpForm.requestSubmit();
   });
+
+  // ---------- 직접 고르기 ----------
+  const pickInput = cmpForm.pickq;
+  const suggestBox = cmpForm.querySelector('.suggest');
+  const pickedBox = cmpForm.querySelector('.picked');
+  const pickTax = cmpForm.querySelector('.pick-tax');
+  function setPicked(item) {
+    picked = item;
+    pickedBox.hidden = !item;
+    pickTax.hidden = !item;
+    if (item) {
+      pickedBox.querySelector('span').textContent = `✅ ${item.name || item.symbol} (${item.symbol})`;
+      pickInput.value = '';
+    }
+    suggestBox.hidden = true;
+  }
+  let searchTimer = null, searchSeq = 0;
+  pickInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = pickInput.value.trim();
+    if (!q) { suggestBox.hidden = true; return; }
+    searchTimer = setTimeout(async () => {
+      const seq = ++searchSeq;
+      let items = [];
+      try { items = (await api('/api/search?q=' + encodeURIComponent(q))).items || []; } catch (_) { /* 아래 안내 */ }
+      if (seq !== searchSeq) return;
+      suggestBox.innerHTML = items.length
+        ? items.map((x, i) => `<li><button type="button" data-i="${i}"><b>${esc(x.name)}</b> <small>${esc(x.symbol)} · ${esc(x.market || '')}</small></button></li>`).join('')
+        : '<li class="empty">검색 결과가 없어요. 종목코드(예: 005930, TSLA, BTC-KRW)를 그대로 입력해도 돼요.</li>';
+      suggestBox.hidden = false;
+      suggestBox.onclick = (e) => {
+        const b = e.target.closest('button[data-i]');
+        if (b) setPicked(items[Number(b.dataset.i)]);
+      };
+    }, 250);
+  });
+  pickInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const first = suggestBox.querySelector('button[data-i]');
+    if (first) { e.preventDefault(); first.click(); }
+  });
+  cmpForm.querySelector('.chips').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-symbol]');
+    if (b) setPicked({ symbol: b.dataset.symbol, name: b.textContent });
+  });
+  pickedBox.querySelector('button').addEventListener('click', () => setPicked(null));
+  cmpForm.addEventListener('submit', () => {
+    // 고르지 않고 코드만 입력한 경우 그대로 사용
+    const raw = pickInput.value.trim();
+    if (!picked && /^[A-Za-z0-9.\-=^]{1,24}$/.test(raw)) setPicked({ symbol: raw.toUpperCase(), name: '' });
+  }, true);
 
   // ---------- 공유 ----------
   function toast(msg) {

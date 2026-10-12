@@ -10,6 +10,10 @@
 - 대출 모드: 1년 세후 수익률이 **대출 금리를 넘은 확률**과 1·3·5년 연평균 수익률
 - 시세는 `earn/tools/build_market.py`가 Yahoo Finance 월말 수정주가(배당 재투자 반영)로 `earn/market.json` 생성. 배포 워크플로가 평일 장 마감 후 자동 갱신
 - 비교 상품은 `build_market.py`의 `PRODUCTS` 목록만 고치면 추가·변경 가능
+- **직접 골라 비교**: 한글·영문 이름이나 코드(예: 테슬라, 비트코인, 에코프로, SCHD, 005930, BTC-KRW)로 아무 주식·ETF·코인을 검색해서 같은 기준으로 비교
+  - `earn/functions/` = Cloudflare Pages Functions API (`/api/search`: 네이버 자동완성 + 야후 검색, `/api/chart`: 10년 월봉 수정주가, 외화 종목은 그 달 환율로 원화 환산, 야후 데이터 오류값 자동 제거)
+  - GitHub Pages 사이트도 `config.js`의 `apiBase`(https://doncalc.pages.dev) API를 사용
+  - 세금 자동 판정: 국내주식·국내주식형 ETF·가상자산 비과세, 그 외 국내 ETF 15.4%, 해외 상장 22%(250만원 공제). 화면에서 직접 바꿀 수 있음
 
 ## 왜 이 아이템인가
 
@@ -62,7 +66,8 @@
 ```bash
 cd earn
 python3 -m http.server 8000   # http://localhost:8000
-node --test tests/calc.test.js
+node --test tests/calc.test.js tests/market.test.mjs
+npx wrangler pages dev .   # API(functions/)까지 함께 실행하려면
 ```
 
 ## 계산 기준 (2026)

@@ -179,6 +179,24 @@
   }
 
   const INVEST_TAX = { free: 0, dividend: 0.154 };
+  const OVERSEAS_DEDUCTION = 2500000; // 해외주식 양도세 기본공제
+  const TAX_LABELS = { free: '비과세', dividend: '이익의 15.4%', overseas: '해외주식 양도세 22% (250만원 공제)' };
+
+  function investTax(gain, taxKind) {
+    if (gain <= 0) return 0;
+    if (taxKind === 'overseas') return Math.max(0, gain - OVERSEAS_DEDUCTION) * 0.22;
+    return gain * (INVEST_TAX[taxKind] ?? 0.154);
+  }
+
+  const KR_ETF = /^(KODEX|TIGER|KBSTAR|RISE|ACE|SOL|HANARO|KOSEF|KIWOOM|ARIRANG|PLUS|TIMEFOLIO|WON|BNK|파워|마이다스|에셋플러스|TRUSTON|UNICORN|DAISHIN343|히어로즈|KCGI|FOCUS|마이티|ITF|1Q|VITA|KoAct|IBK)/i;
+  const KR_ETF_TAXED = /미국|나스닥|S&P|글로벌|차이나|중국|일본|인도|베트남|유럽|선진국|신흥국|채권|국채|국고채|회사채|통안채|금현물|골드|금선물|원유|달러|엔화|CD금리|KOFR|머니마켓|리츠|혼합|커버드콜|레버리지|인버스|선물|2X/i;
+
+  /** 종목 세금 자동 판정: 가상자산·국내주식·국내주식형 ETF 비과세, 그 외 국내 ETF 15.4%, 해외 상장 22% */
+  function guessTax(symbol, name = '', type = '') {
+    if (/-KRW$/.test(symbol) || type === 'CRYPTOCURRENCY') return 'free';
+    if (/\.(KS|KQ)$/.test(symbol)) return KR_ETF.test(name) && KR_ETF_TAXED.test(name) ? 'dividend' : 'free';
+    return 'overseas';
+  }
 
   /**
    * 한 구간(s → e) 투자 결과. 적립식은 s..e-1 매월 매수, e 시점 평가. 거치식은 s에 일시 매수.
@@ -194,8 +212,7 @@
       principal = amount;
       value = amount * close[e] / close[s];
     }
-    const gain = value - principal;
-    const tax = gain > 0 ? gain * (INVEST_TAX[taxKind] ?? 0.154) : 0;
+    const tax = investTax(value - principal, taxKind);
     return { principal, value, afterTax: value - tax };
   }
 
@@ -230,7 +247,8 @@
   function compareLoan(product, loanRate) {
     const { close, dates } = product;
     const n = close.length;
-    const taxRate = INVEST_TAX[product.tax] ?? 0.154;
+    const taxRate = product.tax === 'overseas' ? 0.22 : (INVEST_TAX[product.tax] ?? 0.154);
+    // 해외주식 22%는 금액별 공제가 있어 연 수익률 비교에서는 보수적으로 22% 전액 적용
     const afterTax = (r) => (r > 0 ? r * (1 - taxRate) : r);
     const cagr = (years) => {
       const m = years * 12;
@@ -251,7 +269,7 @@
   }
 
   const api = { RATES, netSalary, loan, savings, severance, progressiveTax, earnedIncomeDeduction,
-    investWindow, compareSavings, compareLoan };
+    investWindow, compareSavings, compareLoan, investTax, guessTax, TAX_LABELS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
 })(typeof window !== 'undefined' ? window : globalThis);

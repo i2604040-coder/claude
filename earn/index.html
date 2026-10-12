@@ -136,6 +136,31 @@
             <option value="free">비과세</option>
           </select>
         </label>
+        <div class="pick">
+          <label>직접 골라 비교하기 <small>(주식·ETF·코인, 선택)</small>
+            <input name="pickq" type="search" placeholder="예: 테슬라, 비트코인, 에코프로, SCHD" autocomplete="off" enterkeyhint="search">
+          </label>
+          <ul class="suggest" hidden></ul>
+          <div class="chips">
+            <button type="button" data-symbol="BTC-KRW">비트코인</button>
+            <button type="button" data-symbol="ETH-KRW">이더리움</button>
+            <button type="button" data-symbol="TSLA">테슬라</button>
+            <button type="button" data-symbol="NVDA">엔비디아</button>
+            <button type="button" data-symbol="AAPL">애플</button>
+            <button type="button" data-symbol="SCHD">SCHD</button>
+            <button type="button" data-symbol="QQQ">QQQ</button>
+            <button type="button" data-symbol="086520.KQ">에코프로</button>
+          </div>
+          <div class="picked" hidden><span></span><button type="button" class="ghost" aria-label="선택 취소">✕</button></div>
+          <label class="pick-tax" hidden>이 종목 세금
+            <select name="picktax">
+              <option value="auto">자동 판정</option>
+              <option value="free">비과세</option>
+              <option value="dividend">이익의 15.4%</option>
+              <option value="overseas">해외주식 22% (250만원 공제)</option>
+            </select>
+          </label>
+        </div>
         <button type="submit" class="primary">비교하기</button>
       </form>
       <div class="result card" hidden></div>
